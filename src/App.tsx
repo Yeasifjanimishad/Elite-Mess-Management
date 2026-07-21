@@ -1,0 +1,2067 @@
+import React, { useState, useEffect } from 'react';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { 
+  Users as UsersIcon,
+  ShieldCheck,
+  Calendar,
+  Lock,
+  ChevronRight,
+  Menu,
+  Moon,
+  Sun,
+  X,
+  Bell
+} from 'lucide-react';
+
+// Domain types
+import { 
+  User, 
+  UserRole, 
+  MemberMealSheet, 
+  Deposit, 
+  BazaarEntry, 
+  Expense, 
+  Notice, 
+  ActivityLog, 
+  SystemSettings,
+  VacationPeriod,
+  AppNotification
+} from './types';
+
+// Dummy initial data
+import { 
+  initialUsers, 
+  generateInitialMeals, 
+  initialDeposits, 
+  initialBazaarEntries, 
+  initialExpenses, 
+  initialNotices, 
+  initialActivities, 
+  initialSettings 
+} from './dummyData';
+
+// Layout & Tabs Components
+import Sidebar from './components/Sidebar';
+import LoginScreen from './components/LoginScreen';
+import NotificationCenter from './components/NotificationCenter';
+
+// Code Splitting: Dynamically lazy loading large tab panels for lightning fast loading
+const DashboardTab = React.lazy(() => import('./components/DashboardTab'));
+const MealSheetTab = React.lazy(() => import('./components/MealSheetTab'));
+const BazaarTab = React.lazy(() => import('./components/BazaarTab'));
+const DepositTab = React.lazy(() => import('./components/DepositTab'));
+const ExpenseTab = React.lazy(() => import('./components/ExpenseTab'));
+const NoticeBoardTab = React.lazy(() => import('./components/NoticeBoardTab'));
+const ReportsTab = React.lazy(() => import('./components/ReportsTab'));
+const UsersTab = React.lazy(() => import('./components/UsersTab'));
+const SettingsTab = React.lazy(() => import('./components/SettingsTab'));
+const AuditLogTab = React.lazy(() => import('./components/AuditLogTab'));
+
+import { useFeedback } from './components/FeedbackContext';
+
+export default function App() {
+  const { showToast, showAlert, showConfirm } = useFeedback();
+
+  // One-time cleanup of local storage cached demo transactional data
+  if (typeof window !== 'undefined' && !localStorage.getItem('mms_clean_reset_v3')) {
+    localStorage.removeItem('mms_bazaar_entries');
+    localStorage.removeItem('mms_deposits');
+    localStorage.removeItem('mms_expenses');
+    localStorage.removeItem('mms_notices');
+    localStorage.removeItem('mms_activity_logs');
+    localStorage.removeItem('mms_vacations');
+    localStorage.removeItem('mms_meals');
+    localStorage.removeItem('mms_notifications');
+    const savedUsers = localStorage.getItem('mms_users');
+    if (savedUsers) {
+      try {
+        const parsedUsers = JSON.parse(savedUsers);
+        if (Array.isArray(parsedUsers)) {
+          const resetUsers = parsedUsers.map((u: User) => ({ ...u, carryForward: 0 }));
+          localStorage.setItem('mms_users', JSON.stringify(resetUsers));
+        }
+      } catch (e) {}
+    }
+    localStorage.setItem('mms_clean_reset_v3', 'true');
+  }
+
+  // Global States loaded with localStorage persistence
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('mms_users');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((u: User) => ({ ...u, carryForward: 0 }));
+        }
+      } catch (e) {}
+    }
+    return initialUsers;
+  });
+
+  const [meals, setMeals] = useState<MemberMealSheet[]>(() => {
+    const saved = localStorage.getItem('mms_meals');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return generateInitialMeals(users);
+  });
+
+  const [bazaarEntries, setBazaarEntries] = useState<BazaarEntry[]>(() => {
+    const saved = localStorage.getItem('mms_bazaar_entries');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return initialBazaarEntries;
+  });
+
+  const [deposits, setDeposits] = useState<Deposit[]>(() => {
+    const saved = localStorage.getItem('mms_deposits');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return initialDeposits;
+  });
+
+  const [expenses, setExpenses] = useState<Expense[]>(() => {
+    const saved = localStorage.getItem('mms_expenses');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return initialExpenses;
+  });
+
+  const [notices, setNotices] = useState<Notice[]>(() => {
+    const saved = localStorage.getItem('mms_notices');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return initialNotices;
+  });
+
+  const [settings, setSettings] = useState<SystemSettings>(() => {
+    const saved = localStorage.getItem('mms_settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.systemName) return parsed;
+      } catch (e) {}
+    }
+    return initialSettings;
+  });
+
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
+    const saved = localStorage.getItem('mms_activity_logs');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return initialActivities;
+  });
+
+  const [vacations, setVacations] = useState<VacationPeriod[]>(() => {
+    const saved = localStorage.getItem('mms_vacations');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const [assignedBazaarPersons, setAssignedBazaarPersons] = useState<string[]>(() => {
+    const saved = localStorage.getItem('mms_assigned_bazaar_persons');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return ['u-3', 'u-5']; // Default Sajid and Nayeem
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mms_assigned_bazaar_persons', JSON.stringify(assignedBazaarPersons));
+  }, [assignedBazaarPersons]);
+
+  // Notifications State & Center
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    const saved = localStorage.getItem('mms_notifications');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const [notificationCenterOpen, setNotificationCenterOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem('mms_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  // Authentication & Session States using Supabase
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<User>(() => ({
+    id: '',
+    name: 'Resident',
+    email: '',
+    phone: '',
+    role: 'Member' as UserRole,
+    isActive: false,
+    avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+    defaultMealOn: true,
+    carryForward: 0,
+  }));
+  const [currentPersona, setCurrentPersona] = useState<UserRole>('Member');
+  const [loadingSession, setLoadingSession] = useState<boolean>(true);
+
+  // Synchronize database records from Supabase and subscribe to Realtime postgres_changes
+  useEffect(() => {
+    if (!isSupabaseConfigured || !isAuthenticated || !currentUser?.id) return;
+
+    async function syncAllDataFromSupabase() {
+      try {
+        // 1. Fetch Users
+        const { data: dbUsers, error: usersErr } = await supabase.from('users').select('*');
+        if (dbUsers && dbUsers.length > 0 && !usersErr) {
+          const mappedUsers: User[] = dbUsers.map(u => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            phone: u.phone || '',
+            role: u.role as UserRole,
+            isActive: u.is_active,
+            avatarUrl: u.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+            defaultMealOn: u.default_meal_on,
+            carryForward: u.carry_forward ? parseFloat(u.carry_forward) : 0,
+          }));
+          setUsers(mappedUsers);
+        }
+
+        // 2. Fetch Deposits
+        const { data: dbDeposits, error: depErr } = await supabase.from('deposits').select('*');
+        if (dbDeposits && !depErr) {
+          const mappedDeposits: Deposit[] = dbDeposits.map(d => ({
+            id: String(d.id),
+            userId: d.user_id,
+            amount: parseFloat(d.amount),
+            date: d.date,
+            method: d.method as any,
+            transactionId: d.transaction_id || undefined,
+            note: d.note || undefined,
+            status: (d.status || 'Approved') as any
+          }));
+          setDeposits(mappedDeposits);
+        }
+
+        // 3. Fetch Bazaar Entries
+        const { data: dbBazaar, error: bazErr } = await supabase.from('bazaar_entries').select('*');
+        if (dbBazaar && !bazErr) {
+          const mappedBazaar: BazaarEntry[] = dbBazaar.map(b => ({
+            id: String(b.id),
+            date: b.date,
+            items: b.items,
+            quantity: b.quantity,
+            price: parseFloat(b.price),
+            subtotal: b.subtotal ? parseFloat(b.subtotal) : parseFloat(b.price),
+            assignedTo: [b.approved_by || 'u1'],
+            approvedBy: b.approved_by || undefined,
+            status: (b.status || 'Pending') as any,
+            receiptUrl: b.receipt_url || undefined,
+            notes: b.notes || undefined
+          }));
+          setBazaarEntries(mappedBazaar);
+        }
+
+        // 4. Fetch Expenses
+        const { data: dbExpenses, error: expErr } = await supabase.from('expenses').select('*');
+        if (dbExpenses && !expErr) {
+          const mappedExpenses: Expense[] = dbExpenses.map(e => ({
+            id: String(e.id),
+            category: e.category,
+            amount: parseFloat(e.amount),
+            date: e.date,
+            note: e.note || undefined
+          }));
+          setExpenses(mappedExpenses);
+        }
+
+        // 5. Fetch Vacations
+        const { data: dbVacations, error: vacErr } = await supabase.from('vacation_periods').select('*');
+        if (dbVacations && !vacErr) {
+          const mappedVacations: VacationPeriod[] = dbVacations.map(v => ({
+            id: String(v.id),
+            userId: v.user_id,
+            startDate: v.start_date,
+            endDate: v.end_date
+          }));
+          setVacations(mappedVacations);
+        }
+
+        // 6. Fetch Meals
+        const { data: dbMeals, error: mealsErr } = await supabase.from('meals').select('*');
+        if (dbMeals && dbMeals.length > 0 && !mealsErr) {
+          const userMealsMap: Record<string, MemberMealSheet['meals']> = {};
+          dbMeals.forEach(m => {
+            if (!userMealsMap[m.user_id]) {
+              userMealsMap[m.user_id] = {};
+            }
+            userMealsMap[m.user_id][m.date] = {
+              breakfast: m.breakfast,
+              lunch: m.lunch,
+              dinner: m.dinner,
+              guestBreakfast: m.guest_breakfast || 0,
+              guestLunch: m.guest_lunch || 0,
+              guestDinner: m.guest_dinner || 0,
+              managerAdjustment: m.manager_adjustment || 0,
+              adjustmentReason: m.adjustment_reason || undefined
+            };
+          });
+
+          setMeals(prevMeals => {
+            const updated = [...prevMeals];
+            Object.keys(userMealsMap).forEach(uId => {
+              const index = updated.findIndex(sheet => sheet.userId === uId);
+              if (index >= 0) {
+                updated[index] = {
+                  ...updated[index],
+                  meals: {
+                    ...updated[index].meals,
+                    ...userMealsMap[uId]
+                  }
+                };
+              } else {
+                updated.push({
+                  userId: uId,
+                  meals: userMealsMap[uId]
+                });
+              }
+            });
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error("Error in syncAllDataFromSupabase:", err);
+      }
+    }
+
+    syncAllDataFromSupabase();
+
+    // Supabase Realtime Channel Subscription
+    const channel = supabase
+      .channel('public-db-live-sync')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        syncAllDataFromSupabase();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, currentUser?.id]);
+
+  // Listen to real-time session changes and load/restore role-based user profiles
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoadingSession(false);
+      return;
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setLoadingSession(true);
+      if (session?.user) {
+        try {
+          const { data: dbUser, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (dbUser && !error) {
+            const mappedUser: User = {
+              id: dbUser.id,
+              name: dbUser.name,
+              email: dbUser.email,
+              phone: dbUser.phone || '',
+              role: dbUser.role as UserRole,
+              isActive: dbUser.is_active,
+              avatarUrl: dbUser.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+              defaultMealOn: dbUser.default_meal_on,
+              carryForward: dbUser.carry_forward ? parseFloat(dbUser.carry_forward) : 0,
+            };
+            setCurrentUser(mappedUser);
+            setCurrentPersona(mappedUser.role);
+            setIsAuthenticated(true);
+            setLoadingSession(false);
+          } else {
+            // Fallback delay to allow database trigger to complete execution on register
+            setTimeout(async () => {
+              try {
+                const { data: retryUser, error: retryError } = await supabase
+                  .from('users')
+                  .select('*')
+                  .eq('id', session.user.id)
+                  .single();
+
+                if (retryUser && !retryError) {
+                  const mappedUser: User = {
+                    id: retryUser.id,
+                    name: retryUser.name,
+                    email: retryUser.email,
+                    phone: retryUser.phone || '',
+                    role: retryUser.role as UserRole,
+                    isActive: retryUser.is_active,
+                    avatarUrl: retryUser.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+                    defaultMealOn: retryUser.default_meal_on,
+                    carryForward: retryUser.carry_forward ? parseFloat(retryUser.carry_forward) : 0,
+                  };
+                  setCurrentUser(mappedUser);
+                  setCurrentPersona(mappedUser.role);
+                  setIsAuthenticated(true);
+                } else {
+                  setIsAuthenticated(false);
+                }
+              } catch (err) {
+                console.error("Error retrying fetch of user profile:", err);
+                setIsAuthenticated(false);
+              } finally {
+                setLoadingSession(false);
+              }
+            }, 1500);
+          }
+        } catch (err) {
+          console.error("Error loading user profile on auth state change:", err);
+          setIsAuthenticated(false);
+          setLoadingSession(false);
+        }
+      } else {
+        setIsAuthenticated(false);
+        setLoadingSession(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const [currentTab, setCurrentTab] = useState<string>('Dashboard');
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem('mms_dark_mode') === 'true';
+  });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+
+  // Synchronize state back to localStorage
+  useEffect(() => {
+    localStorage.setItem('mms_users', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_meals', JSON.stringify(meals));
+  }, [meals]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_bazaar_entries', JSON.stringify(bazaarEntries));
+  }, [bazaarEntries]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_deposits', JSON.stringify(deposits));
+  }, [deposits]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_expenses', JSON.stringify(expenses));
+  }, [expenses]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_notices', JSON.stringify(notices));
+  }, [notices]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_settings', JSON.stringify(settings));
+  }, [settings]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_activity_logs', JSON.stringify(activityLogs));
+  }, [activityLogs]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_vacations', JSON.stringify(vacations));
+  }, [vacations]);
+
+  useEffect(() => {
+    localStorage.setItem('mms_dark_mode', String(darkMode));
+  }, [darkMode]);
+
+  // Removed mock/localStorage session synchronization
+
+  // Synchronize persona and enforce route permissions
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Sync currentPersona
+    if (currentPersona !== currentUser.role) {
+      setCurrentPersona(currentUser.role);
+    }
+
+    // Access control logic
+    const adminTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'Users', 'AuditLogs', 'Settings'];
+    const managerTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'AuditLogs', 'Settings'];
+    if (settings?.mgrCanManageUsers) {
+      managerTabs.push('Users');
+    }
+    const memberTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'Settings'];
+
+    let allowedTabs = adminTabs;
+    if (currentUser.role === 'Meal Manager') {
+      allowedTabs = managerTabs;
+    } else if (currentUser.role === 'Member') {
+      allowedTabs = memberTabs;
+    }
+
+    if (!allowedTabs.includes(currentTab)) {
+      setCurrentTab('Dashboard');
+    }
+  }, [currentUser, currentTab, settings]);
+
+  // Dark Mode tailwind class toggling
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (darkMode) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  // Synchronize Theme Preset Classes
+  useEffect(() => {
+    const root = window.document.documentElement;
+    // Remove all previous theme classes
+    root.classList.remove('theme-light', 'theme-dark', 'theme-cosmic', 'theme-emerald', 'theme-pink');
+    
+    const theme = settings.theme || 'Light';
+    if (theme === 'Light') {
+      root.classList.add('theme-light');
+      setDarkMode(false);
+    } else if (theme === 'Dark') {
+      root.classList.add('theme-dark');
+      setDarkMode(true);
+    } else if (theme === 'Cosmic Slate') {
+      root.classList.add('theme-cosmic');
+      setDarkMode(true);
+    } else if (theme === 'Emerald Forest') {
+      root.classList.add('theme-emerald');
+      setDarkMode(true);
+    } else if (theme === 'Rose Quartz') {
+      root.classList.add('theme-pink');
+      setDarkMode(true);
+    }
+  }, [settings.theme]);
+
+  // Handle Authentication Success
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    setCurrentPersona(user.role);
+    setIsAuthenticated(true);
+    
+    const userIPs: Record<string, string> = {
+      'u-1': '180.234.3.56',
+      'u-2': '103.230.105.18',
+      'u-3': '103.88.22.10',
+      'u-4': '103.111.45.92',
+      'u-5': '203.190.10.45',
+    };
+    const userDevices: Record<string, string> = {
+      'u-1': 'Chrome 126 (Windows 11)',
+      'u-2': 'Safari 17 (macOS Sonoma)',
+      'u-3': 'Chrome Mobile 126 (Android 14)',
+      'u-4': 'Firefox 125 (Linux Ubuntu)',
+      'u-5': 'Safari Mobile 17 (iOS 17)',
+    };
+
+    const currentUserId = user.id;
+    const ipAddress = userIPs[currentUserId] || '103.242.23.150';
+    const device = userDevices[currentUserId] || 'Chrome 126 (Windows 11)';
+    const now = new Date();
+    
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toTimeString().split(' ')[0];
+
+    const newLog: ActivityLog = {
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      userId: user.id,
+      userName: user.name,
+      action: 'Login',
+      details: `User authenticated securely: ${user.name} with role: ${user.role}`,
+      timestamp: now.toISOString(),
+      oldValue: 'Session: Idle',
+      newValue: 'Session: Active',
+      ipAddress,
+      device,
+      date: dateStr,
+      time: timeStr
+    };
+    setActivityLogs(prev => [newLog, ...prev]);
+  };
+
+  // Handle Log Out securely with Supabase Auth
+  const handleLogout = async () => {
+    try {
+      const userIPs: Record<string, string> = {
+        'u-1': '180.234.3.56',
+        'u-2': '103.230.105.18',
+      };
+      const userDevices: Record<string, string> = {
+        'u-1': 'Chrome 126 (Windows 11)',
+        'u-2': 'Safari 17 (macOS Sonoma)',
+      };
+
+      const currentUserId = currentUser?.id || 'guest';
+      const ipAddress = userIPs[currentUserId] || '103.242.23.150';
+      const device = userDevices[currentUserId] || 'Chrome 126 (Windows 11)';
+      const now = new Date();
+      
+      const dateStr = now.toISOString().slice(0, 10);
+      const timeStr = now.toTimeString().split(' ')[0];
+
+      const newLog: ActivityLog = {
+        id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        userId: currentUserId,
+        userName: currentUser?.name || 'User',
+        action: 'Logout',
+        details: `User logged out from active session: ${currentUser?.name || 'User'}`,
+        timestamp: now.toISOString(),
+        oldValue: 'Session: Active',
+        newValue: 'Session: Idle',
+        ipAddress,
+        device,
+        date: dateStr,
+        time: timeStr
+      };
+      setActivityLogs(prev => [newLog, ...prev]);
+    } catch (e) {
+      console.error("Error logging action during signout:", e);
+    }
+
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+  };
+
+  // UTILITY: Log actions to audit trail
+  const logAction = (actionName: string, details: string, oldValue?: string, newValue?: string) => {
+    const userIPs: Record<string, string> = {
+      'u-1': '180.234.3.56',
+      'u-2': '103.230.105.18',
+      'u-3': '103.88.22.10',
+      'u-4': '103.111.45.92',
+      'u-5': '203.190.10.45',
+    };
+    const userDevices: Record<string, string> = {
+      'u-1': 'Chrome 126 (Windows 11)',
+      'u-2': 'Safari 17 (macOS Sonoma)',
+      'u-3': 'Chrome Mobile 126 (Android 14)',
+      'u-4': 'Firefox 125 (Linux Ubuntu)',
+      'u-5': 'Safari Mobile 17 (iOS 17)',
+    };
+
+    const currentUserId = currentUser?.id || 'guest';
+    const ipAddress = userIPs[currentUserId] || '103.242.23.150';
+    const device = userDevices[currentUserId] || 'Chrome 126 (Windows 11)';
+    const now = new Date();
+    
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toTimeString().split(' ')[0];
+
+    // Normalize actions to required audit log list
+    let mappedAction = actionName;
+    const lowerAction = actionName.toLowerCase();
+    
+    if (lowerAction.includes('meal sheet') || lowerAction.includes('meal reservation') || lowerAction.includes('grid meal') || lowerAction.includes('meal overwrite')) {
+      mappedAction = 'Meal Updates';
+    } else if (lowerAction.includes('guest meal') || lowerAction.includes('guest count')) {
+      mappedAction = 'Guest Meals';
+    } else if (lowerAction.includes('meal adjust')) {
+      mappedAction = 'Meal Adjustments';
+    } else if (lowerAction.includes('deposit')) {
+      mappedAction = 'Deposits';
+    } else if (lowerAction.includes('bazaar entry') || lowerAction.includes('bazaar cost') || (lowerAction.includes('bazaar') && !lowerAction.includes('approv'))) {
+      mappedAction = 'Bazaar Entries';
+    } else if (lowerAction.includes('bazaar approv')) {
+      mappedAction = 'Bazaar Approval';
+    } else if (lowerAction.includes('notice') || lowerAction.includes('announc')) {
+      mappedAction = 'Notices';
+    } else if (lowerAction.includes('role') || lowerAction.includes('manager') || lowerAction.includes('permission') || lowerAction.includes('assign')) {
+      mappedAction = 'Manager Changes';
+    } else if (lowerAction.includes('close') || lowerAction.includes('lock') || lowerAction.includes('unlock')) {
+      mappedAction = 'Month Closing';
+    } else if (lowerAction.includes('setting') || lowerAction.includes('variables') || lowerAction.includes('theme') || lowerAction.includes('config')) {
+      mappedAction = 'Settings Changes';
+    } else if (lowerAction.includes('login') || lowerAction.includes('session open')) {
+      mappedAction = 'Login';
+    } else if (lowerAction.includes('logout') || lowerAction.includes('session close')) {
+      mappedAction = 'Logout';
+    }
+
+    const newLog: ActivityLog = {
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      userId: currentUserId,
+      userName: currentUser?.name || 'Guest User',
+      action: mappedAction,
+      details: details,
+      timestamp: now.toISOString(),
+      oldValue: oldValue || 'N/A',
+      newValue: newValue || 'N/A',
+      ipAddress,
+      device,
+      date: dateStr,
+      time: timeStr
+    };
+    setActivityLogs(prev => [newLog, ...prev]);
+  };
+
+  // -------------------------------------------------------------------
+  // IN-APP NOTIFICATIONS ENGINE
+  // -------------------------------------------------------------------
+  
+  // 1. Mark a notification as read
+  const handleMarkNotificationAsRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+  };
+
+  // 2. Mark all relevant notifications as read
+  const handleMarkAllNotificationsAsRead = () => {
+    setNotifications(prev => prev.map(n => {
+      if (!n.targetUserId || n.targetUserId === currentUser.id) {
+        return { ...n, isRead: true };
+      }
+      return n;
+    }));
+  };
+
+  // 3. Clear all relevant notifications
+  const handleClearAllNotifications = () => {
+    setNotifications(prev => prev.filter(n => n.targetUserId && n.targetUserId !== currentUser.id));
+  };
+
+  // 4. Push general or targeted notification
+  const handleAddNotification = (
+    type: AppNotification['type'],
+    title: string,
+    description: string,
+    targetUserId?: string,
+    linkToTab?: string
+  ) => {
+    const newNotif: AppNotification = {
+      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type,
+      title,
+      description,
+      date: '2026-07-18', // July 2026 current month hardcoded context
+      isRead: false,
+      targetUserId,
+      linkToTab,
+      timestamp: new Date().toISOString()
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+  };
+
+  // 5. Trigger Meal Reminder callback
+  const handleTriggerMealReminder = (targetUserId?: string) => {
+    if (targetUserId) {
+      const u = users.find(x => x.id === targetUserId);
+      const name = u ? u.name : 'Resident';
+      handleAddNotification(
+        'MealReminder',
+        `Action Required: Complete Meal Reservations`,
+        `Hi ${name}, please update your meal sheet preferences for tomorrow as soon as possible before lock times.`,
+        targetUserId,
+        'MealSheet'
+      );
+      logAction('Meal Reminder Transmitted', `Sent targeted meal sheet update request to ${name}`);
+    } else {
+      // Broadcast to all active users
+      users.filter(u => u.isActive).forEach(u => {
+        handleAddNotification(
+          'MealReminder',
+          `Daily Mess Meal Sheet Alert`,
+          `Hi ${u.name}, tomorrow's meal reservations will lock at 10:00 PM. Please verify your breakfast, lunch, and dinner preferences.`,
+          u.id,
+          'MealSheet'
+        );
+      });
+      logAction('Meal Reminder Broadcasted', 'Broadcasted daily meal reservation reminders to all active mess members');
+    }
+  };
+
+  // 6. Trigger Bazaar Reminder callback
+  const handleTriggerBazaarReminder = (userIds: string[], date: string) => {
+    userIds.forEach(uid => {
+      const u = users.find(x => x.id === uid);
+      const name = u ? u.name : 'Resident';
+      handleAddNotification(
+        'BazaarReminder',
+        `Pantry Schedule Notice: Bazaar Duty tomorrow`,
+        `Hi ${name}, you are scheduled for tomorrow's bazaar on ${date}. Please coordinate shopping lists and submit item costs.`,
+        uid,
+        'Bazaar'
+      );
+    });
+    logAction('Bazaar Duty Reminder Transmitted', `Notified assigned bazaar persons about their duty schedule for ${date}`);
+  };
+
+  // 7. Trigger Deposit Reminder callback
+  const handleTriggerDepositReminder = (targetUserId?: string, customNote?: string) => {
+    const defaultNote = `Please review your balance ledger and deposit cash/bKash/Nagad transactions to keep meals active.`;
+    const finalNote = customNote || defaultNote;
+    if (targetUserId) {
+      const u = users.find(x => x.id === targetUserId);
+      const name = u ? u.name : 'Resident';
+      handleAddNotification(
+        'DepositReminder',
+        `Payment Needed: Deposit Account Update`,
+        `Hi ${name}, ${finalNote}`,
+        targetUserId,
+        'Deposits'
+      );
+      logAction('Deposit Reminder Transmitted', `Sent deposit reminder request to ${name}`);
+    } else {
+      users.filter(u => u.isActive).forEach(u => {
+        handleAddNotification(
+          'DepositReminder',
+          `Mess Outflow Alert: Monthly Balance Replenish`,
+          `Hi ${u.name}, ${finalNote}`,
+          u.id,
+          'Deposits'
+        );
+      });
+      logAction('Deposit Reminder Broadcasted', 'Broadcasted monthly balance deposit request alerts to all residents');
+    }
+  };
+
+  // Session Restore / Loader Screen
+  if (loadingSession) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 transition-colors duration-300">
+        <div className="relative flex items-center justify-center">
+          <div className="w-16 h-16 border-4 border-slate-200 border-t-emerald-600 rounded-full animate-spin"></div>
+        </div>
+        <p className="mt-6 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest animate-pulse">
+          {settings.language === 'Bangla' ? 'মেস ডাটা লোড হচ্ছে...' : 'Restoring Session...'}
+        </p>
+      </div>
+    );
+  }
+
+  // Local login handler for smooth authentication when backend is not connected or fails
+  const handleLocalLogin = (email: string, pass: string, fullName?: string, phone?: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    
+    // Search for existing local user matching email
+    let matchedUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+    if (!matchedUser) {
+      // Automatically create a local user profile if not found
+      const derivedName = fullName || cleanEmail.split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+
+      matchedUser = {
+        id: `user-${Date.now()}`,
+        name: derivedName || 'Mess Member',
+        email: cleanEmail,
+        phone: phone || '01700000000',
+        role: users.some(u => u.role === 'Admin') ? 'Member' : 'Admin',
+        isActive: true,
+        avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+        defaultMealOn: true,
+        carryForward: 0,
+      };
+
+      setUsers(prev => {
+        const updated = [...prev, matchedUser!];
+        localStorage.setItem('mms_users', JSON.stringify(updated));
+        return updated;
+      });
+    }
+
+    if (!matchedUser.isActive) {
+      throw new Error(
+        settings.language === 'Bangla'
+          ? 'আপনার অ্যাকাউন্টটি নিষ্ক্রিয় করা আছে। মেস অ্যাডমিনের সাথে যোগাযোগ করুন।'
+          : 'Your account is deactivated. Please contact your Admin.'
+      );
+    }
+
+    setCurrentUser(matchedUser);
+    setCurrentPersona(matchedUser.role);
+    setIsAuthenticated(true);
+    showToast(
+      settings.language === 'Bangla'
+        ? `স্বাগতম, ${matchedUser.name}! (সফলভাবে লগইন করা হয়েছে)`
+        : `Welcome, ${matchedUser.name}! (Signed in successfully)`,
+      'success'
+    );
+  };
+
+  // Demo mode login handler when database/auth connection is not configured or fails
+  const handleDemoLogin = (role: UserRole = 'Admin') => {
+    const demoUser = users.find(u => u.role === role) || users[0] || {
+      id: 'demo-admin-id',
+      name: 'Demo Admin',
+      email: 'admin@mess.com',
+      phone: '01700000000',
+      role: 'Admin',
+      isActive: true,
+      avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+      defaultMealOn: true,
+      carryForward: 0,
+    };
+    setCurrentUser(demoUser);
+    setCurrentPersona(demoUser.role);
+    setIsAuthenticated(true);
+  };
+
+  // Guard Screen: Render LoginScreen if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className={darkMode ? 'dark' : ''}>
+        <LoginScreen 
+          language={settings.language || 'English'}
+          onLanguageChange={(lang) => setSettings(prev => ({ ...prev, language: lang }))}
+          onDemoLogin={handleDemoLogin}
+          onLocalLogin={handleLocalLogin}
+        />
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------
+  // CALLBACK ACTIONS
+  // -------------------------------------------------------------------
+
+  // Update tomorrow's meal reservations (Dashboard)
+  const handleUpdateTomorrowMeals = (updatedStatus: { breakfast: boolean; lunch: boolean; dinner: boolean }) => {
+    if (settings.isMonthClosed) return;
+
+    // Find current user's meal sheet
+    setMeals(prevSheets => {
+      return prevSheets.map(sheet => {
+        if (sheet.userId === currentUser.id) {
+          const updatedMeals = { ...sheet.meals };
+          const tomorrowDate = '2026-07-19'; // hardcoded target month tomorrow date
+          
+          updatedMeals[tomorrowDate] = {
+            ...updatedMeals[tomorrowDate],
+            ...updatedStatus
+          };
+
+          return {
+            ...sheet,
+            meals: updatedMeals
+          };
+        }
+        return sheet;
+      });
+    });
+
+    logAction(
+      'Meal Reservation Update',
+      `Updated tomorrow's (${'2026-07-19'}) meals: Breakfast=${updatedStatus.breakfast ? 'ON' : 'OFF'}, Lunch=${updatedStatus.lunch ? 'ON' : 'OFF'}, Dinner=${updatedStatus.dinner ? 'ON' : 'OFF'}`
+    );
+  };
+
+  // Toggle meal status cell directly in grid (Excel Grid Sheet)
+  const handleToggleMealStatus = (userId: string, date: string, mealType: 'breakfast' | 'lunch' | 'dinner') => {
+    if (settings.isMonthClosed) return;
+
+    // Check permissions: Members can only toggle their own
+    if (currentPersona === 'Member' && userId !== currentUser.id) {
+      showToast('Unauthorized! Members cannot modify other residents meal reservations.', 'error');
+      return;
+    }
+
+    setMeals(prevSheets => {
+      return prevSheets.map(sheet => {
+        if (sheet.userId === userId) {
+          const updatedMeals = { ...sheet.meals };
+          const targetDay = updatedMeals[date] || {
+            breakfast: false,
+            lunch: false,
+            dinner: false,
+            guestBreakfast: 0,
+            guestLunch: 0,
+            guestDinner: 0
+          };
+
+          updatedMeals[date] = {
+            ...targetDay,
+            [mealType]: !targetDay[mealType]
+          };
+
+          return {
+            ...sheet,
+            meals: updatedMeals
+          };
+        }
+        return sheet;
+      });
+    });
+
+    const uName = users.find(u => u.id === userId)?.name || 'Unknown';
+    logAction(
+      'Grid Meal Overwrite',
+      `Overrode reservation for ${uName} on ${date} (${mealType}: ${!meals.find(s => s.userId === userId)?.meals[date]?.[mealType] ? 'ON' : 'OFF'})`
+    );
+  };
+
+  // Adjust guest count in grid cell
+  const handleGuestMealChange = (userId: string, date: string, mealType: 'breakfast' | 'lunch' | 'dinner', count: number) => {
+    if (settings.isMonthClosed) return;
+    if (count < 0 || count > settings.guestMealLimit) return;
+
+    if (currentPersona === 'Member' && userId !== currentUser.id) return;
+
+    setMeals(prevSheets => {
+      return prevSheets.map(sheet => {
+        if (sheet.userId === userId) {
+          const updatedMeals = { ...sheet.meals };
+          const targetDay = updatedMeals[date] || {
+            breakfast: false,
+            lunch: false,
+            dinner: false,
+            guestBreakfast: 0,
+            guestLunch: 0,
+            guestDinner: 0
+          };
+
+          const fieldKey = mealType === 'breakfast' ? 'guestBreakfast' : mealType === 'lunch' ? 'guestLunch' : 'guestDinner';
+
+          updatedMeals[date] = {
+            ...targetDay,
+            [fieldKey]: count
+          };
+
+          return {
+            ...sheet,
+            meals: updatedMeals
+          };
+        }
+        return sheet;
+      });
+    });
+
+    const uName = users.find(u => u.id === userId)?.name || 'Unknown';
+    logAction(
+      'Guest Count Modified',
+      `Adjusted guests for ${uName} on ${date} (${mealType} guest count: ${count})`
+    );
+  };
+
+  // Update Meals (Syncs to Supabase)
+  const handleUpdateMeals = (updatedMeals: MemberMealSheet[]) => {
+    setMeals(updatedMeals);
+
+    if (isSupabaseConfigured) {
+      updatedMeals.forEach(sheet => {
+        Object.keys(sheet.meals).forEach(dateStr => {
+          const dayMeal = sheet.meals[dateStr];
+          supabase.from('meals').upsert({
+            user_id: sheet.userId,
+            date: dateStr,
+            breakfast: dayMeal.breakfast,
+            lunch: dayMeal.lunch,
+            dinner: dayMeal.dinner,
+            guest_breakfast: dayMeal.guestBreakfast,
+            guest_lunch: dayMeal.guestLunch,
+            guest_dinner: dayMeal.guestDinner,
+            manager_adjustment: dayMeal.managerAdjustment || 0,
+            adjustment_reason: dayMeal.adjustmentReason || null
+          }, { onConflict: 'user_id,date' }).then(({ error }) => {
+            if (error) console.error("Error upserting meal to Supabase:", error);
+          });
+        });
+      });
+    }
+  };
+
+  // Add Bazaar expense record
+  const handleAddBazaarEntry = (entry: Omit<BazaarEntry, 'id'>) => {
+    if (settings.isMonthClosed) return;
+
+    const tempId = `baz-${Date.now()}`;
+    const newEntry: BazaarEntry = {
+      ...entry,
+      status: entry.status || 'Pending',
+      id: tempId
+    };
+
+    setBazaarEntries(prev => [newEntry, ...prev]);
+
+    const submitter = users.find(u => u.id === entry.assignedTo[0])?.name || 'Unknown';
+    logAction(
+      'Bazaar Entries',
+      `Bazaar claims created for ${submitter}: ${entry.items} worth ${settings.currency}${entry.price}`,
+      'No entry recorded',
+      `Items: ${entry.items}, Quantity: ${entry.quantity}, Price: ${settings.currency}${entry.price}, Status: ${entry.status}`
+    );
+
+    if (isSupabaseConfigured) {
+      supabase.from('bazaar_entries').insert({
+        date: entry.date,
+        items: entry.items,
+        quantity: entry.quantity,
+        price: entry.price,
+        subtotal: entry.subtotal || entry.price,
+        status: entry.status || 'Pending',
+        approved_by: entry.approvedBy || currentUser.id,
+        notes: entry.notes || null,
+        receipt_url: entry.receiptUrl || null
+      }).select().then(({ data, error }) => {
+        if (data && data[0] && !error) {
+          const realId = String(data[0].id);
+          setBazaarEntries(prev => prev.map(b => b.id === tempId ? { ...b, id: realId } : b));
+        } else if (error) {
+          console.error("Error inserting bazaar entry to Supabase:", error);
+        }
+      });
+    }
+  };
+
+  // Delete Bazaar record
+  const handleDeleteBazaarEntry = (id: string) => {
+    if (settings.isMonthClosed) return;
+
+    const target = bazaarEntries.find(b => b.id === id);
+    if (!target) return;
+
+    setBazaarEntries(prev => prev.filter(b => b.id !== id));
+    logAction(
+      'Bazaar Entries', 
+      `Deleted bazaar claims record: ${target.items} (${settings.currency}${target.price})`,
+      `Items: ${target.items}, Quantity: ${target.quantity}, Price: ${settings.currency}${target.price}, Status: ${target.status}`,
+      'Record completely deleted'
+    );
+
+    if (isSupabaseConfigured) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('bazaar_entries').delete().eq('id', qId).then(({ error }) => {
+        if (error) console.error("Error deleting bazaar entry from Supabase:", error);
+      });
+    }
+  };
+
+  // Approve / Reject bazaar claim
+  const handleUpdateBazaarStatus = (id: string, status: 'Approved' | 'Rejected') => {
+    if (settings.isMonthClosed) return;
+
+    setBazaarEntries(prev => prev.map(b => {
+      if (b.id === id) {
+        return { ...b, status, approvedBy: currentUser.id };
+      }
+      return b;
+    }));
+
+    const target = bazaarEntries.find(b => b.id === id);
+    if (target) {
+      logAction(
+        'Bazaar Approval', 
+        `Audited Bazaar entry: marked ${target.items} claims as ${status}`,
+        `Status: ${target.status}`,
+        `Status: ${status}`
+      );
+    }
+
+    if (isSupabaseConfigured) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('bazaar_entries').update({
+        status,
+        approved_by: currentUser.id
+      }).eq('id', qId).then(({ error }) => {
+        if (error) console.error("Error updating bazaar status in Supabase:", error);
+      });
+    }
+  };
+
+  // Edit Bazaar Entry
+  const handleEditBazaarEntry = (updatedEntry: BazaarEntry) => {
+    if (settings.isMonthClosed) return;
+
+    const target = bazaarEntries.find(b => b.id === updatedEntry.id);
+    const oldText = target 
+      ? `Items: ${target.items}, Quantity: ${target.quantity}, Price: ${settings.currency}${target.price}, Status: ${target.status}`
+      : 'N/A';
+
+    setBazaarEntries(prev => prev.map(b => b.id === updatedEntry.id ? updatedEntry : b));
+    logAction(
+      'Bazaar Entries', 
+      `Modified bazaar claims record: ${updatedEntry.items} (${settings.currency}${updatedEntry.price})`,
+      oldText,
+      `Items: ${updatedEntry.items}, Quantity: ${updatedEntry.quantity}, Price: ${settings.currency}${updatedEntry.price}, Status: ${updatedEntry.status}`
+    );
+
+    if (isSupabaseConfigured) {
+      const qId = isNaN(Number(updatedEntry.id)) ? updatedEntry.id : Number(updatedEntry.id);
+      supabase.from('bazaar_entries').update({
+        items: updatedEntry.items,
+        quantity: updatedEntry.quantity,
+        price: updatedEntry.price,
+        subtotal: updatedEntry.subtotal || updatedEntry.price,
+        status: updatedEntry.status,
+        notes: updatedEntry.notes || null,
+        date: updatedEntry.date
+      }).eq('id', qId).then(({ error }) => {
+        if (error) console.error("Error updating bazaar entry in Supabase:", error);
+      });
+    }
+  };
+
+  // Add Deposit
+  const handleAddDeposit = (deposit: Omit<Deposit, 'id'>) => {
+    if (settings.isMonthClosed) return;
+
+    const tempId = `dep-${Date.now()}`;
+    const newDeposit: Deposit = {
+      ...deposit,
+      id: tempId
+    };
+
+    setDeposits(prev => [newDeposit, ...prev]);
+
+    const memberName = users.find(u => u.id === deposit.userId)?.name || 'Unknown';
+    logAction(
+      'Deposits',
+      `Recorded payment of ${settings.currency}${deposit.amount} for ${memberName} via ${deposit.method}`,
+      'No transactions recorded',
+      `Deposit: ${settings.currency}${deposit.amount}, Method: ${deposit.method}, Status: ${deposit.status}`
+    );
+
+    if (isSupabaseConfigured) {
+      supabase.from('deposits').insert({
+        user_id: deposit.userId,
+        amount: deposit.amount,
+        date: deposit.date,
+        method: deposit.method,
+        transaction_id: deposit.transactionId || null,
+        note: deposit.note || null,
+        status: deposit.status || 'Approved'
+      }).select().then(({ data, error }) => {
+        if (data && data[0] && !error) {
+          const realId = String(data[0].id);
+          setDeposits(prev => prev.map(d => d.id === tempId ? { ...d, id: realId } : d));
+        } else if (error) {
+          console.error("Error inserting deposit to Supabase:", error);
+        }
+      });
+    }
+  };
+
+  // Delete Deposit
+  const handleDeleteDeposit = (id: string) => {
+    if (settings.isMonthClosed) return;
+
+    const target = deposits.find(d => d.id === id);
+    if (!target) return;
+
+    setDeposits(prev => prev.filter(d => d.id !== id));
+    const memberName = users.find(u => u.id === target.userId)?.name || 'Unknown';
+    logAction(
+      'Deposits',
+      `Deleted deposit transaction for ${memberName} worth ${settings.currency}${target.amount}`,
+      `Deposit: ${settings.currency}${target.amount}, Method: ${target.method}, Status: ${target.status}`,
+      'Transaction completely deleted'
+    );
+
+    if (isSupabaseConfigured) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('deposits').delete().eq('id', qId).then(({ error }) => {
+        if (error) console.error("Error deleting deposit from Supabase:", error);
+      });
+    }
+  };
+
+  // Approve / Reject deposit claim
+  const handleUpdateDepositStatus = (id: string, status: 'Approved' | 'Rejected') => {
+    if (settings.isMonthClosed) return;
+
+    setDeposits(prev => prev.map(d => {
+      if (d.id === id) {
+        return { ...d, status };
+      }
+      return d;
+    }));
+
+    const target = deposits.find(d => d.id === id);
+    if (target) {
+      const memberName = users.find(u => u.id === target.userId)?.name || 'Unknown';
+      logAction(
+        'Deposits',
+        `Audited Deposit transaction for ${memberName}: marked ${settings.currency}${target.amount} as ${status}`,
+        `Status: ${target.status}`,
+        `Status: ${status}`
+      );
+    }
+
+    if (isSupabaseConfigured) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('deposits').update({ status }).eq('id', qId).then(({ error }) => {
+        if (error) console.error("Error updating deposit status in Supabase:", error);
+      });
+    }
+  };
+
+  // Add Overhead utility expense
+  const handleAddExpense = (expense: Omit<Expense, 'id'>) => {
+    if (settings.isMonthClosed) return;
+
+    const tempId = `exp-${Date.now()}`;
+    const newExpense: Expense = {
+      ...expense,
+      id: tempId
+    };
+
+    setExpenses(prev => [newExpense, ...prev]);
+    logAction(
+      'Overhead Cost Created',
+      `Registered monthly overhead: ${expense.category} cost worth ${settings.currency}${expense.amount}`
+    );
+
+    if (isSupabaseConfigured) {
+      supabase.from('expenses').insert({
+        category: expense.category,
+        amount: expense.amount,
+        date: expense.date,
+        note: expense.note || null
+      }).select().then(({ data, error }) => {
+        if (data && data[0] && !error) {
+          const realId = String(data[0].id);
+          setExpenses(prev => prev.map(e => e.id === tempId ? { ...e, id: realId } : e));
+        } else if (error) {
+          console.error("Error inserting expense to Supabase:", error);
+        }
+      });
+    }
+  };
+
+  // Delete Overhead utility expense
+  const handleDeleteExpense = (id: string) => {
+    if (settings.isMonthClosed) return;
+
+    const target = expenses.find(e => e.id === id);
+    if (!target) return;
+
+    setExpenses(prev => prev.filter(e => e.id !== id));
+    logAction('Overhead Cost Revoked', `Deleted overhead entry: ${target.category} bill worth ${settings.currency}${target.amount}`);
+
+    if (isSupabaseConfigured) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('expenses').delete().eq('id', qId).then(({ error }) => {
+        if (error) console.error("Error deleting expense from Supabase:", error);
+      });
+    }
+  };
+
+  // Publish Notice
+  const handleAddNotice = (notice: Omit<Notice, 'id' | 'date' | 'authorId' | 'authorName'>) => {
+    const newNotice: Notice = {
+      ...notice,
+      id: `not-${Date.now()}`,
+      date: '2026-07-18', // today's date
+      authorId: currentUser.id,
+      authorName: currentUser.name
+    };
+
+    setNotices(prev => [newNotice, ...prev]);
+    logAction(
+      'Notices', 
+      `Broadcasted board announcement: "${notice.title}"`,
+      'No Notice published',
+      `Title: ${notice.title}, Priority: ${notice.priority}, Expiry: ${notice.expiryDate || 'None'}`
+    );
+
+    // Trigger Notice Published notification for all active members
+    users.filter(u => u.isActive).forEach(u => {
+      handleAddNotification(
+        'NoticePublished',
+        `New Notice: ${notice.title}`,
+        `Hi ${u.name}, ${currentUser.name} published an announcement: "${notice.title}". Tap to view details on the Notice Board.`,
+        u.id,
+        'Notices'
+      );
+    });
+  };
+
+  // Delete Notice
+  const handleDeleteNotice = (id: string) => {
+    if (currentPersona === 'Member') return;
+    const target = notices.find(n => n.id === id);
+    if (!target) return;
+    setNotices(prev => prev.filter(n => n.id !== id));
+    logAction(
+      'Notices', 
+      `Removed notice: "${target.title}"`,
+      `Title: ${target.title}, Priority: ${target.priority}, Author: ${target.authorName}`,
+      'Notice completely deleted'
+    );
+  };
+
+  // Toggle Pin Notice
+  const handleTogglePinNotice = (id: string) => {
+    if (currentPersona === 'Member') return;
+    const target = notices.find(n => n.id === id);
+    if (!target) return;
+    const nextPinned = !target.isPinned;
+    setNotices(prev => prev.map(n => n.id === id ? { ...n, isPinned: nextPinned } : n));
+    logAction(
+      'Notices', 
+      `${nextPinned ? 'Pinned' : 'Unpinned'} notice: "${target.title}"`,
+      `isPinned: ${target.isPinned ? 'true' : 'false'}`,
+      `isPinned: ${nextPinned ? 'true' : 'false'}`
+    );
+  };
+
+  // Create User (Admin Only)
+  const handleAddUser = (user: Omit<User, 'id'>) => {
+    const newUserId = `u${users.length + 1}`;
+    const newUser: User = {
+      ...user,
+      id: newUserId
+    };
+
+    setUsers(prev => [...prev, newUser]);
+
+    // Create a corresponding blank meal sheet for this month
+    const blankMeals: MemberMealSheet['meals'] = {};
+    for (let day = 1; day <= 31; day++) {
+      const dateStr = `2026-07-${day < 10 ? '0' + day : day}`;
+      blankMeals[dateStr] = {
+        breakfast: user.defaultMealOn,
+        lunch: user.defaultMealOn,
+        dinner: user.defaultMealOn,
+        guestBreakfast: 0,
+        guestLunch: 0,
+        guestDinner: 0
+      };
+    }
+
+    const newSheet: MemberMealSheet = {
+      userId: newUserId,
+      meals: blankMeals
+    };
+
+    setMeals(prev => [...prev, newSheet]);
+    logAction(
+      'Manager Changes', 
+      `Registered new member profile: ${user.name} with privilege ${user.role}`,
+      'N/A',
+      `Name: ${user.name}, Role: ${user.role}, Email: ${user.email}, Phone: ${user.phone}, Active: ${user.isActive ? 'Yes' : 'No'}`
+    );
+  };
+
+  // Update User Profile details
+  const handleUpdateUser = (updatedUser: User) => {
+    const previousUser = users.find(u => u.id === updatedUser.id);
+    const oldText = previousUser 
+      ? `Name: ${previousUser.name}, Role: ${previousUser.role}, Email: ${previousUser.email || 'N/A'}, Phone: ${previousUser.phone || 'N/A'}, Active: ${previousUser.isActive ? 'Yes' : 'No'}`
+      : 'N/A';
+    const newText = `Name: ${updatedUser.name}, Role: ${updatedUser.role}, Email: ${updatedUser.email || 'N/A'}, Phone: ${updatedUser.phone || 'N/A'}, Active: ${updatedUser.isActive ? 'Yes' : 'No'}`;
+
+    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+    logAction('Manager Changes', `Adjusted profile data for ${updatedUser.name}`, oldText, newText);
+
+    // Sync to Supabase users table
+    if (isSupabaseConfigured) {
+      supabase.from('users').update({
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        role: updatedUser.role,
+        is_active: updatedUser.isActive,
+        default_meal_on: updatedUser.defaultMealOn,
+      }).eq('id', updatedUser.id).then(({ error }) => {
+        if (error && updatedUser.email) {
+          supabase.from('users').update({
+            name: updatedUser.name,
+            phone: updatedUser.phone,
+            role: updatedUser.role,
+            is_active: updatedUser.isActive,
+            default_meal_on: updatedUser.defaultMealOn,
+          }).eq('email', updatedUser.email).then(({ error: err2 }) => {
+            if (err2) console.error("Error syncing user update to Supabase:", err2);
+          });
+        } else if (error) {
+          console.error("Error syncing user update to Supabase:", error);
+        }
+      });
+    }
+
+    // Trigger Manager Changed notification if role changes to or from 'Meal Manager'
+    if (previousUser && previousUser.role !== updatedUser.role) {
+      const isManagerChange = previousUser.role === 'Meal Manager' || updatedUser.role === 'Meal Manager';
+      if (isManagerChange) {
+        users.filter(u => u.isActive).forEach(u => {
+          handleAddNotification(
+            'ManagerChanged',
+            `Mess Authority Transition: Manager Changed`,
+            `The administration has updated the roles. ${updatedUser.name} role changed from ${previousUser.role} to ${updatedUser.role}.`,
+            u.id,
+            'Dashboard'
+          );
+        });
+      }
+    }
+  };
+
+  // Delete User Profile
+  const handleDeleteUser = (id: string) => {
+    const target = users.find(u => u.id === id);
+    if (!target) return;
+
+    setUsers(prev => prev.filter(u => u.id !== id));
+    setMeals(prev => prev.filter(s => s.userId !== id));
+    logAction(
+      'Manager Changes', 
+      `Removed member credentials completely for: ${target.name}`,
+      `Name: ${target.name}, Role: ${target.role}, Email: ${target.email || 'N/A'}, Phone: ${target.phone || 'N/A'}`,
+      'Profile deleted permanently'
+    );
+
+    // Sync deletion to Supabase users table
+    if (isSupabaseConfigured) {
+      supabase.from('users').delete().eq('id', id).then(({ error }) => {
+        if (error && target.email) {
+          supabase.from('users').delete().eq('email', target.email).then(({ error: err2 }) => {
+            if (err2) console.error("Error syncing user deletion to Supabase:", err2);
+          });
+        } else if (error) {
+          console.error("Error syncing user deletion to Supabase:", error);
+        }
+      });
+    }
+  };
+
+  // Update Settings
+  const handleUpdateSettings = (updatedSettings: SystemSettings) => {
+    const wasClosed = settings.isMonthClosed;
+    setSettings(updatedSettings);
+
+    const oldText = `Closed: ${settings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${settings.theme || 'Default'}, Lang: ${settings.language || 'English'}, LockTime: ${settings.mealLockTime}`;
+    const newText = `Closed: ${updatedSettings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${updatedSettings.theme || 'Default'}, Lang: ${updatedSettings.language || 'English'}, LockTime: ${updatedSettings.mealLockTime}`;
+
+    if (wasClosed !== updatedSettings.isMonthClosed) {
+      logAction(
+        'Month Closing', 
+        `Month state toggled to ${updatedSettings.isMonthClosed ? 'Closed & Locked' : 'Open & Editable'}`,
+        oldText,
+        newText
+      );
+    } else {
+      logAction(
+        'Settings Changes',
+        `Adjusted general mess settings values`,
+        oldText,
+        newText
+      );
+    }
+
+    // Trigger Month Closed notification if toggled to true
+    if (!wasClosed && updatedSettings.isMonthClosed) {
+      users.filter(u => u.isActive).forEach(u => {
+        handleAddNotification(
+          'MonthClosed',
+          `Mess Month Closed & Locked`,
+          `Hi ${u.name}, the current month (July 2026) has been officially closed and audited. Ledger edits are now locked.`,
+          u.id,
+          'Reports'
+        );
+      });
+    }
+  };
+
+  // Restore Backup snapshots
+  const handleRestoreBackup = (backupData: any) => {
+    if (backupData.users) setUsers(backupData.users);
+    if (backupData.meals) setMeals(backupData.meals);
+    if (backupData.deposits) setDeposits(backupData.deposits);
+    if (backupData.bazaarEntries) setBazaarEntries(backupData.bazaarEntries);
+    if (backupData.expenses) setExpenses(backupData.expenses);
+    if (backupData.notices) setNotices(backupData.notices);
+    if (backupData.activityLogs) setActivityLogs(backupData.activityLogs);
+    if (backupData.vacations) setVacations(backupData.vacations);
+    if (backupData.assignedBazaarPersons) setAssignedBazaarPersons(backupData.assignedBazaarPersons);
+    if (backupData.settings) {
+      setSettings(backupData.settings);
+      if (backupData.settings.theme === 'Light') {
+        setDarkMode(false);
+      } else {
+        setDarkMode(true);
+      }
+    }
+    
+    const newLog: ActivityLog = {
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      action: 'System Variables Adjust',
+      details: 'Full database snapshot restored successfully from offline backup file.',
+      timestamp: new Date().toISOString()
+    };
+    setActivityLogs(prev => [newLog, ...prev]);
+  };
+
+  // Add Vacation Period Sabbatical
+  const handleAddVacation = (userId: string, startDate: string, endDate: string) => {
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) return;
+
+    const tempId = `vac_${Date.now()}`;
+    const newVacation: VacationPeriod = {
+      id: tempId,
+      userId,
+      startDate,
+      endDate
+    };
+
+    setVacations(prev => [...prev, newVacation]);
+    logAction('Vacation Scheduled', `Vacation registered for ${targetUser.name} from ${startDate} to ${endDate}. Meals are automatically marked OFF for these dates.`);
+
+    if (isSupabaseConfigured) {
+      supabase.from('vacation_periods').insert({
+        user_id: userId,
+        start_date: startDate,
+        end_date: endDate
+      }).select().then(({ data, error }) => {
+        if (data && data[0] && !error) {
+          const realId = String(data[0].id);
+          setVacations(prev => prev.map(v => v.id === tempId ? { ...v, id: realId } : v));
+        } else if (error) {
+          console.error("Error inserting vacation to Supabase:", error);
+        }
+      });
+    }
+  };
+
+  // Update Vacation Period
+  const handleUpdateVacation = (id: string, userId: string, startDate: string, endDate: string) => {
+    const targetUser = users.find(u => u.id === userId);
+    const updatedVacation: VacationPeriod = {
+      id: String(id),
+      userId,
+      startDate,
+      endDate
+    };
+
+    setVacations(prev => {
+      const exists = prev.some(v => String(v.id) === String(id) || v.userId === userId);
+      if (exists) {
+        return prev.map(v => (String(v.id) === String(id) || v.userId === userId) ? updatedVacation : v);
+      } else {
+        return [...prev, updatedVacation];
+      }
+    });
+    logAction('Vacation Updated', `Updated vacation scheduled for ${targetUser?.name || 'User'} to ${startDate} to ${endDate}.`);
+
+    if (isSupabaseConfigured) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('vacation_periods').update({
+        user_id: userId,
+        start_date: startDate,
+        end_date: endDate
+      }).eq('user_id', userId).then(({ error }) => {
+        if (error) {
+          supabase.from('vacation_periods').update({
+            start_date: startDate,
+            end_date: endDate
+          }).eq('id', qId);
+        }
+      });
+    }
+  };
+
+  // Cancel Vacation Period
+  const handleCancelVacation = (id: string) => {
+    const target = vacations.find(v => String(v.id) === String(id));
+    if (!target) return;
+
+    const targetUser = users.find(u => u.id === target.userId);
+    setVacations(prev => prev.filter(v => String(v.id) !== String(id)));
+    logAction('Vacation Cancelled', `Cancelled vacation scheduled for ${targetUser?.name || 'User'} (${target.startDate} to ${target.endDate}). Regular schedule resumes.`);
+
+    if (isSupabaseConfigured) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('vacation_periods').delete().eq('id', qId).then(({ error }) => {
+        if (error) {
+          supabase.from('vacation_periods').delete().eq('user_id', target.userId);
+        }
+      });
+    }
+  };
+
+  // -------------------------------------------------------------------
+  // RENDERING TAB DISPATCHER
+  // -------------------------------------------------------------------
+  const renderTabContent = () => {
+    switch (currentTab) {
+      case 'Dashboard':
+        return (
+          <DashboardTab
+            currentUser={currentUser}
+            role={currentPersona}
+            allUsers={users}
+            meals={meals}
+            deposits={deposits}
+            bazaarEntries={bazaarEntries}
+            expenses={expenses}
+            notices={notices}
+            activities={activityLogs}
+            settings={settings}
+            vacationPeriods={vacations}
+            onQuickAction={(action) => {
+              if (action === 'deposit') setCurrentTab('Deposits');
+              else if (action === 'bazaar') setCurrentTab('Bazaar');
+              else if (action === 'notice') setCurrentTab('Notices');
+              else if (action === 'adjustment') setCurrentTab('MealSheet');
+              else if (action === 'vacation') {
+                setCurrentTab('MealSheet');
+                setTimeout(() => {
+                  const element = document.getElementById('vacation-panel');
+                  if (element) {
+                    element.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }, 100);
+              }
+            }}
+            onUpdateMeals={handleUpdateMeals}
+          />
+        );
+      case 'MealSheet':
+        return (
+          <MealSheetTab
+            currentUser={currentUser}
+            role={currentPersona}
+            allUsers={users}
+            meals={meals}
+            onUpdateMeals={handleUpdateMeals}
+            settings={settings}
+            vacationPeriods={vacations}
+            onAddVacation={handleAddVacation}
+            onUpdateVacation={handleUpdateVacation}
+            onCancelVacation={handleCancelVacation}
+            onLogAction={logAction}
+            onUpdateSettings={handleUpdateSettings}
+          />
+        );
+      case 'Bazaar':
+        return (
+          <BazaarTab
+            currentUser={currentUser}
+            role={currentPersona}
+            allUsers={users}
+            bazaarEntries={bazaarEntries}
+            onAddBazaarEntry={handleAddBazaarEntry}
+            onEditBazaarEntry={handleEditBazaarEntry}
+            onApproveEntry={(id, status) => handleUpdateBazaarStatus(id, status)}
+            onDeleteEntry={handleDeleteBazaarEntry}
+            settings={settings}
+            assignedBazaarPersons={assignedBazaarPersons}
+            onUpdateAssignedPersons={setAssignedBazaarPersons}
+            onTriggerBazaarReminder={handleTriggerBazaarReminder}
+          />
+        );
+      case 'Deposits':
+        return (
+          <DepositTab
+            currentUser={currentUser}
+            role={currentPersona}
+            allUsers={users}
+            deposits={deposits}
+            onAddDeposit={handleAddDeposit}
+            onDeleteDeposit={handleDeleteDeposit}
+            onApproveDeposit={handleUpdateDepositStatus}
+            onUpdateUser={handleUpdateUser}
+            meals={meals}
+            bazaarEntries={bazaarEntries}
+            expenses={expenses}
+            settings={settings}
+          />
+        );
+      case 'Expenses':
+        return (
+          <ExpenseTab
+            currentUser={currentUser}
+            role={currentPersona}
+            expenses={expenses}
+            onAddExpense={handleAddExpense}
+            onDeleteExpense={handleDeleteExpense}
+            settings={settings}
+          />
+        );
+      case 'Notices':
+        return (
+          <NoticeBoardTab
+            currentUser={currentUser}
+            role={currentPersona}
+            notices={notices}
+            onAddNotice={handleAddNotice}
+            onDeleteNotice={handleDeleteNotice}
+            onTogglePinNotice={handleTogglePinNotice}
+            settings={settings}
+          />
+        );
+      case 'Reports':
+        return (
+          <ReportsTab
+            allUsers={users}
+            meals={meals}
+            deposits={deposits}
+            bazaarEntries={bazaarEntries}
+            expenses={expenses}
+            settings={settings}
+            currentUser={currentUser}
+            role={currentPersona}
+            onUpdateUsers={setUsers}
+            onUpdateSettings={handleUpdateSettings}
+            onLogAction={logAction}
+            vacationPeriods={vacations}
+          />
+        );
+      case 'Users':
+        return (
+          <UsersTab
+            currentUser={currentUser}
+            allUsers={users}
+            onAddUser={handleAddUser}
+            onUpdateUser={handleUpdateUser}
+            onDeleteUser={handleDeleteUser}
+            settings={settings}
+          />
+        );
+      case 'AuditLogs':
+        return (
+          <AuditLogTab
+            activities={activityLogs}
+          />
+        );
+      case 'Settings':
+        return (
+          <SettingsTab
+            role={currentPersona}
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            onRestoreBackup={handleRestoreBackup}
+            allDataToBackup={{
+              users,
+              meals,
+              deposits,
+              bazaarEntries,
+              expenses,
+              notices,
+              activityLogs,
+              vacations,
+              assignedBazaarPersons,
+            }}
+          />
+        );
+      default:
+        return (
+          <div className="py-20 text-center">
+            <h2 className="text-xl font-bold">Work In Progress</h2>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex bg-slate-50/70 dark:bg-slate-950 font-sans transition-colors duration-300">
+      
+      {/* DESKTOP SIDEBAR - STICKY LEFT */}
+      <div className={`hidden lg:block shrink-0 border-r border-slate-100 dark:border-slate-900 bg-white dark:bg-slate-900 h-screen sticky top-0 transition-all duration-350 ${
+        sidebarCollapsed ? 'w-20' : 'w-64'
+      }`}>
+        <Sidebar
+          currentTab={currentTab}
+          setCurrentTab={setCurrentTab}
+          collapsed={sidebarCollapsed}
+          setCollapsed={setSidebarCollapsed}
+          role={currentPersona}
+          setRole={setCurrentPersona}
+          currentUser={currentUser}
+          setCurrentUser={setCurrentUser}
+          allUsers={users}
+          systemName={settings.systemName}
+          onLogout={handleLogout}
+          settings={settings}
+        />
+      </div>
+
+      {/* MOBILE DRAWER SIDEBAR */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden animate-fade-in bg-slate-900/40 backdrop-blur-xs">
+          <div className="relative w-64 max-w-xs bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-100 dark:border-slate-850">
+            <button 
+              onClick={() => setMobileMenuOpen(false)}
+              className="absolute right-4 top-4 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-500 transition hover:text-slate-800"
+            >
+              <X size={18} />
+            </button>
+            
+            <div className="h-full pt-4">
+              <Sidebar
+                currentTab={currentTab}
+                setCurrentTab={(tab) => {
+                  setCurrentTab(tab);
+                  setMobileMenuOpen(false);
+                }}
+                collapsed={false}
+                setCollapsed={() => {}}
+                role={currentPersona}
+                setRole={setCurrentPersona}
+                currentUser={currentUser}
+                setCurrentUser={setCurrentUser}
+                allUsers={users}
+                systemName={settings.systemName}
+                onLogout={handleLogout}
+                settings={settings}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MAIN CONTAINER FRAME */}
+      <div className="flex-1 flex flex-col min-w-0">
+        
+        {/* TOP COMPONENT HEADER BAR */}
+        <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 dark:border-slate-900 h-16 flex items-center justify-between px-6">
+          
+          <div className="flex items-center gap-3">
+            {/* Mobile burger button */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="p-2 -ml-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden transition"
+            >
+              <Menu size={20} />
+            </button>
+
+            {/* Breadcrumb path */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold uppercase tracking-wider">
+              <span>{settings.systemName}</span>
+              <ChevronRight size={12} className="text-slate-300" />
+              <span className="text-slate-800 dark:text-white font-black">{currentTab}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            
+            {/* Month indicator */}
+            <div className="bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-750">
+              <Calendar size={13} className="text-emerald-500" />
+              <span>July 2026</span>
+            </div>
+
+            {/* Month Closed lockdown alert banner */}
+            {settings.isMonthClosed && (
+              <div className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/15 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 uppercase tracking-wider">
+                <Lock size={12} /> Closed
+              </div>
+            )}
+
+            {/* Quick Dark Mode icon toggle */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              title={darkMode ? 'Switch to Light' : 'Switch to Dark'}
+            >
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            {/* Notification Bell with Badge */}
+            <button
+              onClick={() => setNotificationCenterOpen(true)}
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition relative"
+              title="Open Notification Center"
+              id="notification-bell-btn"
+            >
+              <Bell size={18} />
+              {notifications.filter(n => (!n.targetUserId || n.targetUserId === currentUser.id) && !n.isRead).length > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />
+              )}
+            </button>
+
+            {/* Persona Display avatar */}
+            <div className="flex items-center gap-2.5">
+              <div className="text-right hidden sm:block">
+                <span className="font-bold text-slate-850 dark:text-white text-xs block">{currentUser.name}</span>
+                <span className="text-[10px] text-slate-400 block font-semibold uppercase tracking-wider">{currentPersona} Mode</span>
+              </div>
+              <img 
+                src={currentUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} 
+                className="w-8.5 h-8.5 rounded-full object-cover ring-2 ring-emerald-500/20"
+                alt={currentUser.name} 
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+          </div>
+
+        </header>
+
+        {/* PAGE SCREEN STAGE */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full max-w-full mx-auto overflow-y-auto space-y-6">
+          <React.Suspense fallback={
+            <div className="flex flex-col items-center justify-center py-24 space-y-4">
+              <div className="w-10 h-10 border-3 border-slate-200 border-t-emerald-600 rounded-full animate-spin"></div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading component...</p>
+            </div>
+          }>
+            {renderTabContent()}
+          </React.Suspense>
+        </main>
+
+      </div>
+
+      {/* GLOBAL IN-APP NOTIFICATION CENTER DRAWER */}
+      <NotificationCenter
+        notifications={notifications}
+        currentUser={currentUser}
+        allUsers={users}
+        meals={meals}
+        assignedBazaarPersons={assignedBazaarPersons}
+        onMarkAsRead={handleMarkNotificationAsRead}
+        onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+        onClearAll={handleClearAllNotifications}
+        onTriggerMealReminder={handleTriggerMealReminder}
+        onTriggerBazaarReminder={handleTriggerBazaarReminder}
+        onTriggerDepositReminder={handleTriggerDepositReminder}
+        onNavigateTab={(tab) => setCurrentTab(tab)}
+        isOpen={notificationCenterOpen}
+        onClose={() => setNotificationCenterOpen(false)}
+        currency={settings.currency}
+      />
+
+    </div>
+  );
+}

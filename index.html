@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>Mess Management System</title>
+    
+    <!-- PWA Primary Manifest & Styling -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#059669" />
+    
+    <!-- Icons & Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    
+    <!-- iOS / Safari Mobile App Shell Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MMS Dashboard" />
+    
+    <!-- Application SEO Metadata -->
+    <meta name="description" content="A modern, highly responsive Mess Management System (MMS) dashboard for tracking meals, bazaar expenses, deposits, and reports." />
+  </head>
+  <body class="bg-slate-50/70 dark:bg-slate-950">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Non-blocking Service Worker registration script -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('MMS Service Worker registered successfully under scope:', registration.scope);
+            })
+            .catch((error) => {
+              console.error('MMS Service Worker registration failed:', error);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
+
+

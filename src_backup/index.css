@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+@theme {
+  --color-emerald-50: var(--emerald-50, #ecfdf5);
+  --color-emerald-100: var(--emerald-100, #d1fae5);
+  --color-emerald-200: var(--emerald-200, #a7f3d0);
+  --color-emerald-400: var(--emerald-400, #34d399);
+  --color-emerald-500: var(--emerald-500, #10b981);
+  --color-emerald-600: var(--emerald-600, #059669);
+  --color-emerald-700: var(--emerald-700, #047857);
+  --color-emerald-800: var(--emerald-800, #065f46);
+  --color-emerald-900: var(--emerald-900, #064e3b);
+  --color-emerald-950: var(--emerald-950, #022c22);
+}
+
+:root {
+  --emerald-50: #ecfdf5;
+  --emerald-100: #d1fae5;
+  --emerald-200: #a7f3d0;
+  --emerald-400: #34d399;
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+  --emerald-700: #047857;
+  --emerald-800: #065f46;
+  --emerald-900: #064e3b;
+  --emerald-950: #022c22;
+}
+
+/* Light Slate Theme (Default) */
+.theme-light {
+  --emerald-50: #ecfdf5;
+  --emerald-100: #d1fae5;
+  --emerald-200: #a7f3d0;
+  --emerald-400: #34d399;
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+  --emerald-700: #047857;
+  --emerald-800: #065f46;
+  --emerald-900: #064e3b;
+  --emerald-950: #022c22;
+}
+
+/* Charcoal Dark Theme */
+.theme-dark {
+  --emerald-50: #022c22;
+  --emerald-100: #064e3b;
+  --emerald-200: #065f46;
+  --emerald-400: #10b981;
+  --emerald-500: #34d399;
+  --emerald-600: #059669;
+  --emerald-700: #047857;
+  --emerald-800: #d1fae5;
+  --emerald-900: #ecfdf5;
+  --emerald-950: #ffffff;
+}
+
+/* Cosmic Slate Theme */
+.theme-cosmic {
+  --emerald-50: #1e1b4b; /* Indigo 950 */
+  --emerald-100: #312e81; /* Indigo 900 */
+  --emerald-200: #3730a3; /* Indigo 800 */
+  --emerald-400: #818cf8; /* Indigo 400 */
+  --emerald-500: #6366f1; /* Indigo 500 */
+  --emerald-600: #4f46e5; /* Indigo 600 */
+  --emerald-700: #4338ca; /* Indigo 700 */
+  --emerald-800: #c7d2fe; /* Indigo 200 */
+  --emerald-900: #e0e7ff; /* Indigo 100 */
+  --emerald-950: #f5f3ff; /* Indigo 50 */
+}
+
+/* Override background & borders specifically for Cosmic Slate */
+.theme-cosmic.dark {
+  background-color: #030014 !important; /* ultra-dark space black */
+}
+.theme-cosmic .dark\:bg-slate-950 {
+  background-color: #030014 !important; /* ultra-dark space black */
+}
+.theme-cosmic .dark\:bg-slate-900 {
+  background-color: #0b0720 !important; /* deep cosmic violet-slate */
+}
+.theme-cosmic .dark\:border-slate-900 {
+  border-color: rgba(99, 102, 241, 0.2) !important;
+}
+.theme-cosmic .dark\:border-slate-800 {
+  border-color: rgba(99, 102, 241, 0.1) !important;
+}
+.theme-cosmic .dark\:border-slate-700 {
+  border-color: rgba(99, 102, 241, 0.2) !important;
+}
+.theme-cosmic .text-emerald-600 {
+  color: #6366f1 !important;
+}
+.theme-cosmic .dark\:text-emerald-400 {
+  color: #818cf8 !important;
+}
+
+/* Emerald Forest Theme */
+.theme-emerald {
+  --emerald-50: #022c16; /* Emerald 950 forest dark */
+  --emerald-100: #064e22; /* Emerald 900 forest green */
+  --emerald-200: #15803d; /* Green 700 */
+  --emerald-400: #4ade80; /* Green 400 */
+  --emerald-500: #22c55e; /* Green 500 */
+  --emerald-600: #16a34a; /* Green 600 */
+  --emerald-700: #15803d; /* Green 700 */
+  --emerald-800: #bbf7d0; /* Green 200 */
+  --emerald-900: #dcfce7; /* Green 100 */
+  --emerald-950: #f0fdf4; /* Green 50 */
+}
+
+/* Override background & borders specifically for Emerald Forest */
+.theme-emerald.dark {
+  background-color: #022c16 !important; /* deep dark jungle green */
+}
+.theme-emerald .dark\:bg-slate-950 {
+  background-color: #022c16 !important; /* deep dark jungle green */
+}
+.theme-emerald .dark\:bg-slate-900 {
+  background-color: #043d1f !important; /* deep moss green */
+}
+.theme-emerald .dark\:border-slate-900 {
+  border-color: rgba(34, 197, 94, 0.2) !important;
+}
+.theme-emerald .dark\:border-slate-800 {
+  border-color: rgba(34, 197, 94, 0.1) !important;
+}
+.theme-emerald .dark\:border-slate-700 {
+  border-color: rgba(34, 197, 94, 0.2) !important;
+}
+.theme-emerald .text-emerald-600 {
+  color: #22c55e !important;
+}
+.theme-emerald .dark\:text-emerald-400 {
+  color: #4ade80 !important;
+}
+
+/* Rose Quartz (Pink) Theme */
+.theme-pink {
+  --emerald-50: #2d0f21; /* deep dark rose */
+  --emerald-100: #4d1536; /* deep plum */
+  --emerald-200: #831843; /* Pink 800 */
+  --emerald-400: #f472b6; /* Pink 400 */
+  --emerald-500: #ec4899; /* Pink 500 */
+  --emerald-600: #db2777; /* Pink 600 */
+  --emerald-700: #be185d; /* Pink 700 */
+  --emerald-800: #fbcfe8; /* Pink 200 */
+  --emerald-900: #fce7f3; /* Pink 100 */
+  --emerald-950: #fff1f2; /* Rose 50 */
+}
+
+/* Override background & borders specifically for Rose Quartz */
+.theme-pink.dark {
+  background-color: #1c0612 !important; /* deep rose-tinted black */
+}
+.theme-pink .dark\:bg-slate-950 {
+  background-color: #1c0612 !important; /* deep rose-tinted black */
+}
+.theme-pink .dark\:bg-slate-900 {
+  background-color: #2e091e !important; /* deep plum */
+}
+.theme-pink .dark\:border-slate-900 {
+  border-color: rgba(236, 72, 153, 0.2) !important;
+}
+.theme-pink .dark\:border-slate-800 {
+  border-color: rgba(236, 72, 153, 0.1) !important;
+}
+.theme-pink .dark\:border-slate-700 {
+  border-color: rgba(236, 72, 153, 0.2) !important;
+}
+.theme-pink .text-emerald-600 {
+  color: #ec4899 !important;
+}
+.theme-pink .dark\:text-emerald-400 {
+  color: #f472b6 !important;
+}

@@ -1,0 +1,40 @@
+{
+  "name": "Mess Management System",
+  "short_name": "MMS Mess",
+  "description": "A modern, highly responsive Mess Management System (MMS) dashboard for tracking meals, bazaar expenses, deposits, and reports.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#059669",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512 1024x1024",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512 1024x1024",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Meal Sheet Grid",
+      "short_name": "Meal Sheet",
+      "description": "Manage tomorrow's meal sheet spreadsheet",
+      "url": "/?tab=MealSheet",
+      "icons": [{ "src": "/icon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Bazaar Ledger",
+      "short_name": "Bazaar",
+      "description": "Log food marketing bazaar expenses",
+      "url": "/?tab=Bazaar",
+      "icons": [{ "src": "/icon.svg", "sizes": "192x192" }]
+    }
+  ]
+}
