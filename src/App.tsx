@@ -59,6 +59,21 @@ const AuditLogTab = React.lazy(() => import('./components/AuditLogTab'));
 
 import { useFeedback } from './components/FeedbackContext';
 
+async function getMessId(userId?: string): Promise<string | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    if (userId) {
+      const { data } = await supabase.from('users').select('mess_id').eq('id', userId).single();
+      if (data?.mess_id) return data.mess_id;
+    }
+    const { data: messData } = await supabase.from('messes').select('id').limit(1);
+    if (messData && messData[0]?.id) return messData[0].id;
+  } catch (err) {
+    console.error("Error retrieving mess_id:", err);
+  }
+  return null;
+}
+
 export default function App() {
   const { showToast, showAlert, showConfirm } = useFeedback();
 
@@ -247,6 +262,7 @@ export default function App() {
         if (dbUsers && dbUsers.length > 0 && !usersErr) {
           const mappedUsers: User[] = dbUsers.map(u => ({
             id: u.id,
+            messId: u.mess_id,
             name: u.name,
             email: u.email,
             phone: u.phone || '',
@@ -272,7 +288,16 @@ export default function App() {
             note: d.note || undefined,
             status: (d.status || 'Pending') as any
           }));
-          setDeposits(mappedDeposits);
+          setDeposits(prev => {
+            const localPending = prev.filter(d => String(d.id).startsWith('dep-') || d.status === 'Pending');
+            const combined = [...mappedDeposits];
+            localPending.forEach(localDep => {
+              if (!combined.some(d => d.id === localDep.id)) {
+                combined.unshift(localDep);
+              }
+            });
+            return combined;
+          });
         }
 
         // 3. Fetch Bazaar Entries
@@ -281,17 +306,26 @@ export default function App() {
           const mappedBazaar: BazaarEntry[] = dbBazaar.map(b => ({
             id: String(b.id),
             date: b.date,
-            items: b.items,
-            quantity: b.quantity,
-            price: parseFloat(b.price),
-            subtotal: b.subtotal ? parseFloat(b.subtotal) : parseFloat(b.price),
+            items: b.items || 'Bazaar Expense',
+            quantity: b.quantity || 1,
+            price: parseFloat(b.price || b.subtotal || '0'),
+            subtotal: b.subtotal ? parseFloat(b.subtotal) : parseFloat(b.price || '0'),
             assignedTo: [b.user_id || b.assigned_to || b.approved_by || currentUser?.id || 'u-1'],
             approvedBy: b.approved_by || undefined,
             status: (b.status || 'Pending') as any,
             receiptUrl: b.receipt_url || undefined,
             notes: b.notes || undefined
           }));
-          setBazaarEntries(mappedBazaar);
+          setBazaarEntries(prev => {
+            const localPending = prev.filter(b => String(b.id).startsWith('baz-') || b.status === 'Pending');
+            const combined = [...mappedBazaar];
+            localPending.forEach(localBaz => {
+              if (!combined.some(b => b.id === localBaz.id)) {
+                combined.unshift(localBaz);
+              }
+            });
+            return combined;
+          });
         }
 
         // 4. Fetch Expenses
@@ -1142,24 +1176,29 @@ export default function App() {
     }
 
     if (isSupabaseConfigured) {
-      supabase.from('bazaar_entries').insert({
-        date: entry.date,
-        items: entry.items,
-        quantity: entry.quantity,
-        price: entry.price,
-        subtotal: entry.subtotal || entry.price,
-        status: entry.status || 'Pending',
-        user_id: entry.assignedTo[0] || currentUser.id,
-        approved_by: entry.approvedBy || null,
-        notes: entry.notes || null,
-        receipt_url: entry.receiptUrl || null
-      }).select().then(({ data, error }) => {
-        if (data && data[0] && !error) {
-          const realId = String(data[0].id);
-          setBazaarEntries(prev => prev.map(b => b.id === tempId ? { ...b, id: realId } : b));
-        } else if (error) {
-          console.error("Error inserting bazaar entry to Supabase:", error);
-        }
+      getMessId(currentUser?.id).then(async (messId) => {
+        const payload: any = {
+          date: entry.date,
+          items: entry.items,
+          quantity: entry.quantity,
+          price: entry.price,
+          subtotal: entry.subtotal || entry.price,
+          status: entry.status || 'Pending',
+          user_id: entry.assignedTo[0] || currentUser.id,
+          approved_by: entry.approvedBy || null,
+          notes: entry.notes || null,
+          receipt_url: entry.receiptUrl || null
+        };
+        if (messId) payload.mess_id = messId;
+
+        supabase.from('bazaar_entries').insert(payload).select().then(({ data, error }) => {
+          if (data && data[0] && !error) {
+            const realId = String(data[0].id);
+            setBazaarEntries(prev => prev.map(b => b.id === tempId ? { ...b, id: realId } : b));
+          } else if (error) {
+            console.error("Error inserting bazaar entry to Supabase:", error);
+          }
+        });
       });
     }
   };
@@ -1287,21 +1326,26 @@ export default function App() {
     }
 
     if (isSupabaseConfigured) {
-      supabase.from('deposits').insert({
-        user_id: deposit.userId,
-        amount: deposit.amount,
-        date: deposit.date,
-        method: deposit.method,
-        transaction_id: deposit.transactionId || null,
-        note: deposit.note || null,
-        status: deposit.status || 'Pending'
-      }).select().then(({ data, error }) => {
-        if (data && data[0] && !error) {
-          const realId = String(data[0].id);
-          setDeposits(prev => prev.map(d => d.id === tempId ? { ...d, id: realId } : d));
-        } else if (error) {
-          console.error("Error inserting deposit to Supabase:", error);
-        }
+      getMessId(deposit.userId).then(async (messId) => {
+        const payload: any = {
+          user_id: deposit.userId,
+          amount: deposit.amount,
+          date: deposit.date,
+          method: deposit.method,
+          transaction_id: deposit.transactionId || null,
+          note: deposit.note || null,
+          status: deposit.status || 'Pending'
+        };
+        if (messId) payload.mess_id = messId;
+
+        supabase.from('deposits').insert(payload).select().then(({ data, error }) => {
+          if (data && data[0] && !error) {
+            const realId = String(data[0].id);
+            setDeposits(prev => prev.map(d => d.id === tempId ? { ...d, id: realId } : d));
+          } else if (error) {
+            console.error("Error inserting deposit to Supabase:", error);
+          }
+        });
       });
     }
   };

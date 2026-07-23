@@ -2,6 +2,7 @@ export type UserRole = 'Admin' | 'Meal Manager' | 'Member';
 
 export interface User {
   id: string;
+  messId?: string;
   name: string;
   email: string;
   phone: string;
