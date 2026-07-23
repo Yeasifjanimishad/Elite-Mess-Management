@@ -270,7 +270,7 @@ export default function App() {
             method: d.method as any,
             transactionId: d.transaction_id || undefined,
             note: d.note || undefined,
-            status: (d.status || 'Approved') as any
+            status: (d.status || 'Pending') as any
           }));
           setDeposits(mappedDeposits);
         }
@@ -285,7 +285,7 @@ export default function App() {
             quantity: b.quantity,
             price: parseFloat(b.price),
             subtotal: b.subtotal ? parseFloat(b.subtotal) : parseFloat(b.price),
-            assignedTo: [b.approved_by || 'u1'],
+            assignedTo: [b.user_id || b.assigned_to || b.approved_by || currentUser?.id || 'u-1'],
             approvedBy: b.approved_by || undefined,
             status: (b.status || 'Pending') as any,
             receiptUrl: b.receipt_url || undefined,
@@ -1127,6 +1127,20 @@ export default function App() {
       `Items: ${entry.items}, Quantity: ${entry.quantity}, Price: ${settings.currency}${entry.price}, Status: ${entry.status}`
     );
 
+    if (newEntry.status === 'Pending') {
+      const newNotif: AppNotification = {
+        id: `notif-${Date.now()}`,
+        type: 'BazaarReminder',
+        title: `New Bazaar Claim: ${entry.items}`,
+        description: `${submitter} logged a bazaar expense of ${settings.currency}${entry.total || entry.subtotal || entry.price} for ${entry.items}. Awaiting manager verification.`,
+        date: entry.date,
+        isRead: false,
+        linkToTab: 'Bazaar',
+        timestamp: new Date().toISOString()
+      };
+      setNotifications(prev => [newNotif, ...prev]);
+    }
+
     if (isSupabaseConfigured) {
       supabase.from('bazaar_entries').insert({
         date: entry.date,
@@ -1135,7 +1149,8 @@ export default function App() {
         price: entry.price,
         subtotal: entry.subtotal || entry.price,
         status: entry.status || 'Pending',
-        approved_by: entry.approvedBy || currentUser.id,
+        user_id: entry.assignedTo[0] || currentUser.id,
+        approved_by: entry.approvedBy || null,
         notes: entry.notes || null,
         receipt_url: entry.receiptUrl || null
       }).select().then(({ data, error }) => {
@@ -1257,6 +1272,20 @@ export default function App() {
       `Deposit: ${settings.currency}${deposit.amount}, Method: ${deposit.method}, Status: ${deposit.status}`
     );
 
+    if (deposit.status === 'Pending') {
+      const newNotif: AppNotification = {
+        id: `notif-${Date.now()}`,
+        type: 'DepositReminder',
+        title: `New Deposit Request: ${settings.currency}${deposit.amount}`,
+        description: `${memberName} submitted a deposit request of ${settings.currency}${deposit.amount} via ${deposit.method}. Awaiting manager review.`,
+        date: deposit.date,
+        isRead: false,
+        linkToTab: 'Deposits',
+        timestamp: new Date().toISOString()
+      };
+      setNotifications(prev => [newNotif, ...prev]);
+    }
+
     if (isSupabaseConfigured) {
       supabase.from('deposits').insert({
         user_id: deposit.userId,
@@ -1265,7 +1294,7 @@ export default function App() {
         method: deposit.method,
         transaction_id: deposit.transactionId || null,
         note: deposit.note || null,
-        status: deposit.status || 'Approved'
+        status: deposit.status || 'Pending'
       }).select().then(({ data, error }) => {
         if (data && data[0] && !error) {
           const realId = String(data[0].id);

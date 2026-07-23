@@ -29,7 +29,7 @@ interface BazaarTabProps {
   role: 'Admin' | 'Meal Manager' | 'Member';
   allUsers: UserType[];
   bazaarEntries: BazaarEntry[];
-  onAddBazaarEntry: (entry: Omit<BazaarEntry, 'id' | 'status'>) => void;
+  onAddBazaarEntry: (entry: Omit<BazaarEntry, 'id'>) => void;
   onEditBazaarEntry: (entry: BazaarEntry) => void;
   onApproveEntry: (id: string, status: 'Approved' | 'Rejected', managerId: string) => void;
   onDeleteEntry: (id: string) => void;
@@ -198,7 +198,7 @@ export default function BazaarTab({
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
 
   const isAssignedToBazaar = assignedBazaarPersons.includes(currentUser.id);
-  const canAddBazaar = isManagerOrAdmin || isAssignedToBazaar;
+  const canAddBazaar = true;
 
   // Real-time calculations inside the Form
   const currentSubtotal = Number(formData.quantity || 0) * Number(formData.price || 0);
@@ -286,7 +286,8 @@ export default function BazaarTab({
         total: finalTotal,
         notes: formData.notes,
         assignedTo: [currentUser.id],
-        receiptUrl: formData.receiptUrl
+        receiptUrl: formData.receiptUrl,
+        status: isManagerOrAdmin ? 'Approved' : 'Pending'
       });
     }
 
@@ -437,6 +438,90 @@ export default function BazaarTab({
           )}
         </div>
       </div>
+
+      {/* PENDING BAZAAR CLAIMS APPROVAL QUEUE (ONLY FOR MANAGER / ADMIN) */}
+      {isManagerOrAdmin && bazaarEntries.some(b => b.status === 'Pending') && (
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Clock className="text-amber-600 dark:text-amber-400" size={18} />
+            <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+              {isBangla ? 'অনুমোদনের জন্য অপেক্ষমাণ বাজার খরচসমূহ' : 'Awaiting Bazaar Claims Verification'}
+            </h3>
+            <span className="bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
+              {bazaarEntries.filter(b => b.status === 'Pending').length} Pending
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {bazaarEntries.filter(b => b.status === 'Pending').map((entry) => {
+              const submitter = allUsers.find(u => u.id === (entry.assignedTo[0] || entry.approvedBy)) || { name: 'Member', avatarUrl: '' };
+              return (
+                <div key={entry.id} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-xs flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <img src={submitter.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-7 h-7 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
+                      <div>
+                        <span className="font-bold text-slate-800 dark:text-white text-xs block">{submitter.name}</span>
+                        <span className="text-[10px] text-slate-400">{formatDisplayDate(entry.date)}</span>
+                      </div>
+                    </div>
+                    <span className="text-sm font-black text-amber-600 dark:text-amber-400 bg-amber-500/5 px-2.5 py-1 rounded-lg">
+                      {settings.currency}{(entry.total || entry.subtotal || entry.price).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] space-y-1 text-slate-600 dark:text-slate-300">
+                    <div className="flex justify-between font-bold">
+                      <span>Item:</span>
+                      <span className="text-slate-900 dark:text-white">{entry.items}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Qty & Price:</span>
+                      <span>{entry.quantity} {entry.unit || 'kg'} × {settings.currency}{entry.price}</span>
+                    </div>
+                    {entry.notes && (
+                      <div className="border-t border-slate-50 dark:border-slate-800 pt-1.5 mt-1 text-slate-400 italic text-[10px]">
+                        "{entry.notes}"
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2 border-t border-slate-50 dark:border-slate-800/80">
+                    <button
+                      onClick={() => {
+                        onApproveEntry(entry.id, 'Approved', currentUser.id);
+                        showToast(
+                          isBangla 
+                            ? `"${entry.items}" খরচ অনুমোদন করা হয়েছে!` 
+                            : `Approved bazaar claim: "${entry.items}"`,
+                          'success'
+                        );
+                      }}
+                      className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <ThumbsUp size={12} /> {isBangla ? 'অনুমোদন দিন' : 'Approve'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        onApproveEntry(entry.id, 'Rejected', currentUser.id);
+                        showToast(
+                          isBangla 
+                            ? `"${entry.items}" খরচ বাতিল করা হয়েছে!` 
+                            : `Rejected bazaar claim: "${entry.items}"`,
+                          'info'
+                        );
+                      }}
+                      className="py-1.5 px-3 bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 text-rose-600 dark:text-rose-400 font-bold text-[10px] rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <X size={12} /> {isBangla ? 'বাতিল' : 'Reject'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* FILTER AND SEARCH CONTROLS */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl shadow-xs flex flex-col md:flex-row items-center gap-3">
