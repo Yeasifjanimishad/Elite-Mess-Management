@@ -59,13 +59,78 @@ const AuditLogTab = React.lazy(() => import('./components/AuditLogTab'));
 
 import { useFeedback } from './components/FeedbackContext';
 
+const isUUID = (str?: string): boolean => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+};
+
+async function getSupabaseUserAndMessId(
+  userId: string,
+  usersList: User[],
+  currentUser?: User
+): Promise<{ userId: string; messId: string | null }> {
+  let finalUserId = userId;
+  let finalMessId: string | null = currentUser?.messId || null;
+
+  if (!isSupabaseConfigured) {
+    return { userId: finalUserId, messId: finalMessId };
+  }
+
+  try {
+    // 1. Resolve user_id if not a UUID
+    if (!isUUID(finalUserId)) {
+      const match = usersList.find(u => u.id === userId) || usersList.find(u => isUUID(u.id));
+      if (match && isUUID(match.id)) {
+        finalUserId = match.id;
+        if (match.messId) finalMessId = match.messId;
+      } else if (currentUser && isUUID(currentUser.id)) {
+        finalUserId = currentUser.id;
+        if (currentUser.messId) finalMessId = currentUser.messId;
+      } else {
+        const { data: dbU } = await supabase.from('users').select('id, mess_id').limit(1);
+        if (dbU && dbU[0]) {
+          finalUserId = dbU[0].id;
+          if (dbU[0].mess_id) finalMessId = dbU[0].mess_id;
+        }
+      }
+    }
+
+    // 2. Resolve mess_id if null
+    if (!finalMessId) {
+      if (finalUserId && isUUID(finalUserId)) {
+        const { data: uData } = await supabase.from('users').select('mess_id').eq('id', finalUserId).single();
+        if (uData?.mess_id) finalMessId = uData.mess_id;
+      }
+      if (!finalMessId) {
+        const uWithMess = usersList.find(u => u.messId && isUUID(u.messId));
+        if (uWithMess?.messId) finalMessId = uWithMess.messId;
+      }
+      if (!finalMessId) {
+        const { data: dbU } = await supabase.from('users').select('mess_id').not('mess_id', 'is', null).limit(1);
+        if (dbU && dbU[0]?.mess_id) finalMessId = dbU[0].mess_id;
+      }
+      if (!finalMessId) {
+        const { data: messData } = await supabase.from('messes').select('id').limit(1);
+        if (messData && messData[0]?.id) finalMessId = messData[0].id;
+      }
+    }
+  } catch (err) {
+    console.error("Error in getSupabaseUserAndMessId:", err);
+  }
+
+  return { userId: finalUserId, messId: finalMessId };
+}
+
 async function getMessId(userId?: string): Promise<string | null> {
   if (!isSupabaseConfigured) return null;
   try {
-    if (userId) {
+    if (userId && isUUID(userId)) {
       const { data } = await supabase.from('users').select('mess_id').eq('id', userId).single();
       if (data?.mess_id) return data.mess_id;
     }
+    const { data: dbU } = await supabase.from('users').select('mess_id').not('mess_id', 'is', null).limit(1);
+    if (dbU && dbU[0]?.mess_id) return dbU[0].mess_id;
+
     const { data: messData } = await supabase.from('messes').select('id').limit(1);
     if (messData && messData[0]?.id) return messData[0].id;
   } catch (err) {
@@ -1176,7 +1241,8 @@ export default function App() {
     }
 
     if (isSupabaseConfigured) {
-      getMessId(currentUser?.id).then(async (messId) => {
+      const targetUser = entry.assignedTo[0] || currentUser.id;
+      getSupabaseUserAndMessId(targetUser, users, currentUser).then(async ({ userId: dbUserId, messId }) => {
         const payload: any = {
           date: entry.date,
           items: entry.items,
@@ -1184,7 +1250,7 @@ export default function App() {
           price: entry.price,
           subtotal: entry.subtotal || entry.price,
           status: entry.status || 'Pending',
-          user_id: entry.assignedTo[0] || currentUser.id,
+          user_id: dbUserId,
           approved_by: entry.approvedBy || null,
           notes: entry.notes || null,
           receipt_url: entry.receiptUrl || null
@@ -1326,9 +1392,9 @@ export default function App() {
     }
 
     if (isSupabaseConfigured) {
-      getMessId(deposit.userId).then(async (messId) => {
+      getSupabaseUserAndMessId(deposit.userId, users, currentUser).then(async ({ userId: dbUserId, messId }) => {
         const payload: any = {
-          user_id: deposit.userId,
+          user_id: dbUserId,
           amount: deposit.amount,
           date: deposit.date,
           method: deposit.method,
@@ -1421,18 +1487,23 @@ export default function App() {
     );
 
     if (isSupabaseConfigured) {
-      supabase.from('expenses').insert({
-        category: expense.category,
-        amount: expense.amount,
-        date: expense.date,
-        note: expense.note || null
-      }).select().then(({ data, error }) => {
-        if (data && data[0] && !error) {
-          const realId = String(data[0].id);
-          setExpenses(prev => prev.map(e => e.id === tempId ? { ...e, id: realId } : e));
-        } else if (error) {
-          console.error("Error inserting expense to Supabase:", error);
-        }
+      getSupabaseUserAndMessId(currentUser.id, users, currentUser).then(async ({ messId }) => {
+        const payload: any = {
+          category: expense.category,
+          amount: expense.amount,
+          date: expense.date,
+          note: expense.note || null
+        };
+        if (messId) payload.mess_id = messId;
+
+        supabase.from('expenses').insert(payload).select().then(({ data, error }) => {
+          if (data && data[0] && !error) {
+            const realId = String(data[0].id);
+            setExpenses(prev => prev.map(e => e.id === tempId ? { ...e, id: realId } : e));
+          } else if (error) {
+            console.error("Error inserting expense to Supabase:", error);
+          }
+        });
       });
     }
   };
@@ -1483,6 +1554,29 @@ export default function App() {
         'Notices'
       );
     });
+
+    if (isSupabaseConfigured) {
+      getSupabaseUserAndMessId(currentUser.id, users, currentUser).then(async ({ userId: authorId, messId }) => {
+        const payload: any = {
+          title: notice.title,
+          description: notice.description,
+          priority: notice.priority,
+          date: newNotice.date,
+          author_id: authorId,
+          attachment: notice.attachment || null
+        };
+        if (messId) payload.mess_id = messId;
+
+        supabase.from('notices').insert(payload).select().then(({ data, error }) => {
+          if (data && data[0] && !error) {
+            const realId = String(data[0].id);
+            setNotices(prev => prev.map(n => n.id === newNotice.id ? { ...n, id: realId } : n));
+          } else if (error) {
+            console.error("Error inserting notice to Supabase:", error);
+          }
+        });
+      });
+    }
   };
 
   // Delete Notice
