@@ -333,6 +333,13 @@ CREATE POLICY "Allow Admins and Managers to update profiles in same mess" ON use
         AND public.get_my_role() IN ('Admin', 'Meal Manager')
     );
 
+CREATE POLICY "Allow Admins and Managers to delete profiles in same mess" ON users
+    FOR DELETE USING (
+        mess_id = public.get_my_mess_id()
+        AND public.get_my_role() IN ('Admin', 'Meal Manager')
+        AND id <> auth.uid()
+    );
+
 -- 3. Meals RLS Policies
 CREATE POLICY "Allow read access to meals in the same mess" ON meals
     FOR SELECT USING (

@@ -2074,9 +2074,28 @@ export default function App() {
   };
 
   // Delete User Profile
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string): Promise<boolean> => {
     const target = users.find(u => u.id === id);
-    if (!target) return;
+    if (!target) return false;
+
+    if (isSupabaseConfigured && isUUID(currentUser?.id) && isUUID(id)) {
+      const { data, error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', id)
+        .select('id');
+
+      if (error || !data || data.length === 0) {
+        console.error("Error syncing user deletion to Supabase:", error || "No rows deleted (missing DELETE RLS policy on users table)");
+        showToast(
+          settings.language === 'Bangla'
+            ? 'ডেটাবেস থেকে সদস্য মুছে ফেলা যায়নি। Supabase-এ users টেবিলের DELETE পলিসি যোগ করুন।'
+            : 'Could not delete member from database. Please add the DELETE RLS policy on the users table.',
+          'error'
+        );
+        return false;
+      }
+    }
 
     setUsers(prev => prev.filter(u => u.id !== id));
     setMeals(prev => prev.filter(s => s.userId !== id));
@@ -2086,19 +2105,7 @@ export default function App() {
       `Name: ${target.name}, Role: ${target.role}, Email: ${target.email || 'N/A'}, Phone: ${target.phone || 'N/A'}`,
       'Profile deleted permanently'
     );
-
-    // Sync deletion to Supabase users table
-    if (isSupabaseConfigured) {
-      supabase.from('users').delete().eq('id', id).then(({ error }) => {
-        if (error && target.email) {
-          supabase.from('users').delete().eq('email', target.email).then(({ error: err2 }) => {
-            if (err2) console.error("Error syncing user deletion to Supabase:", err2);
-          });
-        } else if (error) {
-          console.error("Error syncing user deletion to Supabase:", error);
-        }
-      });
-    }
+    return true;
   };
 
   // Ensure all active/existing users have meal sheet date slots initialized for a target month

@@ -23,7 +23,7 @@ interface UsersTabProps {
   allUsers: User[];
   onAddUser: (user: Omit<User, 'id'>) => void;
   onUpdateUser: (updatedUser: User) => void;
-  onDeleteUser: (id: string) => void;
+  onDeleteUser: (id: string) => boolean | void | Promise<boolean | void>;
   settings: SystemSettings;
 }
 
@@ -275,14 +275,16 @@ export default function UsersTab({
                               : `Are you sure you want to permanently delete "${user.name}" from the mess roster?`,
                             confirmLabel: isBangla ? 'মুছুন' : 'Delete',
                             cancelLabel: isBangla ? 'বাতিল' : 'Cancel',
-                            onConfirm: () => {
-                              onDeleteUser(user.id);
-                              showToast(
-                                isBangla 
-                                  ? 'সদস্যকে সফলভাবে মুছে ফেলা হয়েছে।' 
-                                  : 'Member has been successfully deleted.', 
-                                'success'
-                              );
+                            onConfirm: async () => {
+                              const ok = await onDeleteUser(user.id);
+                              if (ok !== false) {
+                                showToast(
+                                  isBangla 
+                                    ? 'সদস্যকে সফলভাবে মুছে ফেলা হয়েছে।' 
+                                    : 'Member has been successfully deleted.', 
+                                  'success'
+                                );
+                              }
                             }
                           });
                         }}
