@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -13,6 +13,7 @@ import {
 import { Expense, SystemSettings, User } from '../types';
 import { motion } from 'motion/react';
 import { useFeedback } from './FeedbackContext';
+import { getRealCurrentMonth, getEffectiveDatesForMonth, formatMonthLabel, getMonthPickerOptions } from '../utils/dateUtils';
 
 interface ExpenseTabProps {
   currentUser: User;
@@ -35,21 +36,38 @@ export default function ExpenseTab({
   const { showToast, showConfirm } = useFeedback();
   const isBangla = settings.language === 'Bangla';
   const isManagerOrAdmin = role === 'Admin' || (role === 'Meal Manager' && settings.mgrCanAddExpense !== false);
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+  const { today } = getEffectiveDatesForMonth(activeMonth);
 
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  const [monthFilter, setMonthFilter] = useState<string>(activeMonth);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     category: 'Gas' as any,
     amount: '',
-    date: '2026-07-18',
+    date: today,
     note: ''
   });
+
+  useEffect(() => {
+    setMonthFilter(activeMonth);
+  }, [activeMonth]);
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, date: today }));
+  }, [today]);
+
+  const monthOptions = getMonthPickerOptions(activeMonth, [
+    ...expenses.map(e => e.date.slice(0, 7)),
+    ...(settings.closedMonths?.map(c => c.month) || [])
+  ]);
 
   const categories = ['Bazaar', 'Gas', 'Electricity', 'Internet', 'Water', 'Cleaning', 'Maid', 'Others'];
 
   const handleOpenModal = () => {
+    setFormData(prev => ({ ...prev, date: today }));
     setIsModalOpen(true);
   };
 
@@ -58,7 +76,7 @@ export default function ExpenseTab({
     setFormData({
       category: 'Gas',
       amount: '',
-      date: '2026-07-18',
+      date: today,
       note: ''
     });
   };
@@ -78,16 +96,20 @@ export default function ExpenseTab({
     handleCloseModal();
   };
 
-  const totalOtherExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const monthScopedExpenses = monthFilter === 'All'
+    ? expenses
+    : expenses.filter(e => e.date.startsWith(monthFilter));
+
+  const totalOtherExpenses = monthScopedExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   // Group by Category for visual chart
-  const categoryTotals = expenses.reduce((acc, exp) => {
+  const categoryTotals = monthScopedExpenses.reduce((acc, exp) => {
     acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
     return acc;
   }, {} as { [cat: string]: number });
 
   // Filter
-  const filteredExpenses = expenses.filter(exp => {
+  const filteredExpenses = monthScopedExpenses.filter(exp => {
     const matchesSearch = exp.note?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           exp.category.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = categoryFilter === 'All' || exp.category === categoryFilter;
@@ -191,6 +213,20 @@ export default function ExpenseTab({
             <option value="All">All Categories</option>
             {categories.map(c => (
               <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+
+          {/* Month Dropdown Filter */}
+          <select
+            value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+            className="text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold cursor-pointer"
+          >
+            <option value="All">{isBangla ? 'সব মাস' : 'All Months'}</option>
+            {monthOptions.map(m => (
+              <option key={m} value={m}>
+                {formatMonthLabel(m, settings.language)}{m === activeMonth ? (isBangla ? ' (চলতি)' : ' (Active)') : ''}
+              </option>
             ))}
           </select>
         </div>
@@ -386,7 +422,7 @@ export default function ExpenseTab({
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Description / Invoice Notes</label>
                 <textarea
-                  placeholder="e.g. Paid maid salary for July, or Cylinder Gas double burner bought"
+                  placeholder="e.g. Paid maid salary for this month, or Cylinder Gas double burner bought"
                   required
                   rows={3}
                   value={formData.note}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -26,6 +26,7 @@ import {
 import { User as UserType, Deposit, SystemSettings, MemberMealSheet, BazaarEntry, Expense } from '../types';
 import { motion } from 'motion/react';
 import { useFeedback } from './FeedbackContext';
+import { getRealCurrentMonth, getEffectiveDatesForMonth, formatMonthLabel, getMonthPickerOptions } from '../utils/dateUtils';
 
 interface DepositTabProps {
   currentUser: UserType;
@@ -59,6 +60,8 @@ export default function DepositTab({
 
   const isManagerOrAdmin = role === 'Admin' || (role === 'Meal Manager' && settings.mgrCanAddDeposit !== false);
   const isBangla = settings.language === 'Bangla';
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+  const { today } = getEffectiveDatesForMonth(activeMonth);
 
   const { showToast, showConfirm } = useFeedback();
 
@@ -67,6 +70,16 @@ export default function DepositTab({
   const [methodFilter, setMethodFilter] = useState<string>('All');
   const [memberFilter, setMemberFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [monthFilter, setMonthFilter] = useState<string>(activeMonth);
+
+  useEffect(() => {
+    setMonthFilter(activeMonth);
+  }, [activeMonth]);
+
+  const monthOptions = getMonthPickerOptions(activeMonth, [
+    ...deposits.map(d => d.date.slice(0, 7)),
+    ...(settings.closedMonths?.map(c => c.month) || [])
+  ]);
 
   // New Deposit modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,58 +88,69 @@ export default function DepositTab({
   const [formData, setFormData] = useState({
     userId: currentUser.role === 'Member' ? currentUser.id : '',
     amount: '',
-    date: new Date().toISOString().split('T')[0],
+    date: today,
     method: 'Cash' as 'Cash' | 'bKash' | 'Nagad' | 'Bank',
     transactionId: '',
     note: ''
   });
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, date: today }));
+  }, [today]);
 
   // Carry Forward Editing State
   const [editingCarryForwardUserId, setEditingCarryForwardUserId] = useState<string | null>(null);
   const [carryForwardInput, setCarryForwardInput] = useState<string>('');
 
   // -------------------------------------------------------------------
-  // SYSTEM FINANCIAL MATH ENGINE
+  // SYSTEM FINANCIAL MATH ENGINE (SCOPED TO ACTIVE BILLING MONTH)
   // -------------------------------------------------------------------
   
-  // Total approved bazaar costs
+  // Total approved bazaar costs for active month
   const totalBazaarCost = bazaarEntries
-    .filter(entry => entry.status === 'Approved')
+    .filter(entry => entry.status === 'Approved' && entry.date.startsWith(activeMonth))
     .reduce((sum, entry) => sum + entry.price, 0);
 
-  // Overhead expenses
-  const totalOtherExpense = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  // Overhead expenses for active month
+  const totalOtherExpense = expenses
+    .filter(exp => exp.date.startsWith(activeMonth))
+    .reduce((sum, exp) => sum + exp.amount, 0);
   const totalExpenses = totalBazaarCost + totalOtherExpense;
 
-  // Total meals consumed across the mess
-  const totalMealsInMonth = meals.reduce((sum, sheet) => {
+  // Total meals consumed across the mess in active month
+  const rawTotalMealsInMonth = meals.reduce((sum, sheet) => {
     let sheetSum = 0;
-    Object.keys(sheet.meals).forEach(date => {
-      const m = sheet.meals[date];
-      const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-      const guest = (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
-      sheetSum += own + guest;
-    });
+    Object.keys(sheet.meals)
+      .filter(date => date.startsWith(activeMonth))
+      .forEach(date => {
+        const m = sheet.meals[date];
+        const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
+        const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
+        sheetSum += own + guest;
+      });
     return sum + sheetSum;
-  }, 0) || 1;
+  }, 0);
+  const totalMealsInMonth = rawTotalMealsInMonth;
 
   // Live meal rate
-  const currentMealRate = totalExpenses / totalMealsInMonth;
+  const currentMealRate = totalMealsInMonth > 0 ? totalExpenses / totalMealsInMonth : 0;
 
   // -------------------------------------------------------------------
-  // MEMBER-SPECIFIC CALCULATIONS
+  // MEMBER-SPECIFIC CALCULATIONS (ACTIVE MONTH)
   // -------------------------------------------------------------------
   
   const getUserMealsCount = (userId: string) => {
     const sheet = meals.find(s => s.userId === userId);
     if (!sheet) return 0;
     let sum = 0;
-    Object.keys(sheet.meals).forEach(date => {
-      const m = sheet.meals[date];
-      const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-      const guest = (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
-      sum += own + guest;
-    });
+    Object.keys(sheet.meals)
+      .filter(date => date.startsWith(activeMonth))
+      .forEach(date => {
+        const m = sheet.meals[date];
+        const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
+        const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
+        sum += own + guest;
+      });
     return sum;
   };
 
@@ -134,7 +158,7 @@ export default function DepositTab({
   
   const getUserTotalDeposits = (userId: string) => {
     return deposits
-      .filter(d => d.userId === userId && d.status !== 'Pending' && d.status !== 'Rejected')
+      .filter(d => d.userId === userId && d.date.startsWith(activeMonth) && d.status !== 'Pending' && d.status !== 'Rejected')
       .reduce((sum, d) => sum + d.amount, 0);
   };
 
@@ -148,15 +172,15 @@ export default function DepositTab({
   };
 
   // -------------------------------------------------------------------
-  // AGGREGATE TREASURY STATISTICS
+  // AGGREGATE TREASURY STATISTICS (ACTIVE MONTH)
   // -------------------------------------------------------------------
   
   const totalApprovedDeposits = deposits
-    .filter(d => d.status !== 'Pending' && d.status !== 'Rejected')
+    .filter(d => d.date.startsWith(activeMonth) && d.status !== 'Pending' && d.status !== 'Rejected')
     .reduce((sum, d) => sum + d.amount, 0);
 
   const totalPendingDeposits = deposits
-    .filter(d => d.status === 'Pending')
+    .filter(d => d.date.startsWith(activeMonth) && d.status === 'Pending')
     .reduce((sum, d) => sum + d.amount, 0);
 
   const totalCarryForwardSum = allUsers
@@ -202,12 +226,13 @@ export default function DepositTab({
     
     const matchesMethod = methodFilter === 'All' || d.method === methodFilter;
     const matchesMember = memberFilter === 'All' || d.userId === memberFilter;
+    const matchesMonth = monthFilter === 'All' || d.date.startsWith(monthFilter);
     
     // Default legacy undefined deposits as 'Approved'
     const depositStatus = d.status || 'Approved';
     const matchesStatus = statusFilter === 'All' || depositStatus === statusFilter;
 
-    return matchesSearch && matchesMethod && matchesMember && matchesStatus;
+    return matchesSearch && matchesMethod && matchesMember && matchesMonth && matchesStatus;
   });
 
   // -------------------------------------------------------------------
@@ -220,10 +245,10 @@ export default function DepositTab({
     if (currentUser.role !== 'Member') {
       const firstActive = allUsers.find(u => u.isActive);
       if (firstActive) {
-        setFormData(prev => ({ ...prev, userId: firstActive.id }));
+        setFormData(prev => ({ ...prev, userId: firstActive.id, date: today }));
       }
     } else {
-      setFormData(prev => ({ ...prev, userId: currentUser.id }));
+      setFormData(prev => ({ ...prev, userId: currentUser.id, date: today }));
     }
   };
 
@@ -233,7 +258,7 @@ export default function DepositTab({
     setFormData({
       userId: currentUser.role === 'Member' ? currentUser.id : '',
       amount: '',
-      date: new Date().toISOString().split('T')[0],
+      date: today,
       method: 'Cash',
       transactionId: '',
       note: ''
@@ -700,6 +725,20 @@ export default function DepositTab({
             <option value="Approved">{isBangla ? 'অনুমোদিত' : 'Approved'}</option>
             <option value="Pending">{isBangla ? 'অপেক্ষমাণ' : 'Pending'}</option>
             <option value="Rejected">{isBangla ? 'বাতিলকৃত' : 'Rejected'}</option>
+          </select>
+
+          {/* Month filter */}
+          <select
+            value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+            className="text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold cursor-pointer"
+          >
+            <option value="All">{isBangla ? 'সব মাস' : 'All Months'}</option>
+            {monthOptions.map(m => (
+              <option key={m} value={m}>
+                {formatMonthLabel(m, settings.language)}{m === activeMonth ? (isBangla ? ' (চলতি)' : ' (Active)') : ''}
+              </option>
+            ))}
           </select>
         </div>
 

@@ -43,6 +43,15 @@ import {
 } from 'recharts';
 import { User, MemberMealSheet, Deposit, BazaarEntry, Expense, Notice, ActivityLog, SystemSettings, VacationPeriod } from '../types';
 import { useFeedback } from './FeedbackContext';
+import {
+  getRealCurrentMonth,
+  getMonthDates,
+  formatMonthLabel,
+  formatShortMonth,
+  formatDateDisplay,
+  formatMonthDayLabel,
+  getEffectiveDatesForMonth
+} from '../utils/dateUtils';
 
 interface DashboardTabProps {
   currentUser: User;
@@ -78,9 +87,16 @@ export default function DashboardTab({
 
   const { showToast } = useFeedback();
 
-  // Current Date logic
-  const today = '2026-07-18';
-  const tomorrow = '2026-07-19';
+  // Current Active Month & Date logic
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+  const { today, tomorrow } = getEffectiveDatesForMonth(activeMonth);
+  const monthDates = getMonthDates(activeMonth);
+  const activeMonthLabel = formatMonthLabel(activeMonth, settings.language);
+  const shortMonthLabel = formatShortMonth(activeMonth);
+
+  const monthBazaarEntries = bazaarEntries.filter(entry => entry.date.startsWith(activeMonth));
+  const monthExpenses = expenses.filter(exp => exp.date.startsWith(activeMonth));
+  const monthDeposits = deposits.filter(d => d.date.startsWith(activeMonth));
 
   const isManagerOrAdmin = role === 'Admin' || role === 'Meal Manager';
   const isBangla = settings.language === 'Bangla';
@@ -99,7 +115,7 @@ export default function DashboardTab({
     if (!userMealSheet) return 0;
     if (isVacation(userMealSheet.userId, date)) return 0; // Automatically OFF during vacation
     const dayMeal = userMealSheet.meals[date] || {
-      breakfast: true, lunch: true, dinner: true,
+      breakfast: false, lunch: false, dinner: false,
       guestBreakfast: 0, guestLunch: 0, guestDinner: 0
     };
     // Breakfast = 0.5, Lunch = 1, Dinner = 1
@@ -108,31 +124,28 @@ export default function DashboardTab({
     return own + guest;
   };
 
-  // Total Meals of the whole mess across the month
+  // Total Meals of the whole mess across the active month
   const totalMealsInMonth = allUsers.filter(u => u.isActive).reduce((sum, user) => {
     let userSum = 0;
     const userSheet = meals.find(s => s.userId === user.id);
-    for (let day = 1; day <= 31; day++) {
-      const dateStr = `2026-07-${day < 10 ? '0' + day : day}`;
-      if (isVacation(user.id, dateStr)) continue; // skip vacation days
-      const m = userSheet?.meals[dateStr] || {
-        breakfast: true, lunch: true, dinner: true,
-        guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-      };
+    monthDates.forEach(dateStr => {
+      if (isVacation(user.id, dateStr)) return; // skip vacation days
+      const m = userSheet?.meals[dateStr];
+      if (!m) return;
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
       const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
       userSum += own + guest;
-    }
+    });
     return sum + userSum;
   }, 0) || 1; // avoid divide by zero
 
-  // Approved Bazaar costs
-  const totalBazaarCost = bazaarEntries
+  // Approved Bazaar costs for active month
+  const totalBazaarCost = monthBazaarEntries
     .filter(entry => entry.status === 'Approved')
     .reduce((sum, entry) => sum + entry.price, 0);
 
-  // Other Expenses (Utility, cleaning etc)
-  const totalOtherExpense = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  // Other Expenses (Utility, cleaning etc) for active month
+  const totalOtherExpense = monthExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
   const totalExpense = totalBazaarCost + totalOtherExpense;
   const currentMealRate = totalExpense / totalMealsInMonth;
@@ -142,7 +155,7 @@ export default function DashboardTab({
     if (isVacation(user.id, today)) return acc; // skip vacation days
     const userSheet = meals.find(s => s.userId === user.id);
     const m = userSheet?.meals[today] || {
-      breakfast: true, lunch: true, dinner: true,
+      breakfast: false, lunch: false, dinner: false,
       guestBreakfast: 0, guestLunch: 0, guestDinner: 0
     };
     acc.breakfast += m.breakfast ? 1 : 0;
@@ -162,7 +175,7 @@ export default function DashboardTab({
     if (isVacation(user.id, tomorrow)) return acc; // skip vacation days
     const userSheet = meals.find(s => s.userId === user.id);
     const m = userSheet?.meals[tomorrow] || {
-      breakfast: true, lunch: true, dinner: true,
+      breakfast: false, lunch: false, dinner: false,
       guestBreakfast: 0, guestLunch: 0, guestDinner: 0
     };
     acc.breakfast += m.breakfast ? 1 : 0;
@@ -178,10 +191,10 @@ export default function DashboardTab({
     (tomorrowBreakdown.guestBreakfast * 0.5) + tomorrowBreakdown.guestLunch + tomorrowBreakdown.guestDinner;
 
   // Pending deposits count
-  const pendingDepositsSum = deposits.filter(d => !d.transactionId && d.method === 'Cash').reduce((sum, d) => sum + d.amount, 0); // simulated cash deposits without ref
+  const pendingDepositsSum = monthDeposits.filter(d => !d.transactionId && d.method === 'Cash').reduce((sum, d) => sum + d.amount, 0);
 
   // Pending Bazaar Entries count
-  const pendingBazaarCount = bazaarEntries.filter(entry => entry.status === 'Pending').length;
+  const pendingBazaarCount = monthBazaarEntries.filter(entry => entry.status === 'Pending').length;
   
   const todayBazaarEntries = bazaarEntries.filter(entry => entry.date === today);
   const todayBazaarTotal = todayBazaarEntries
@@ -201,30 +214,31 @@ export default function DashboardTab({
   // -------------------------------------------------------------
 
   // 1. Total Monthly Deposit (Approved)
-  const totalMonthlyDeposit = deposits
+  const totalMonthlyDeposit = monthDeposits
     .filter(d => d.status === 'Approved')
     .reduce((sum, d) => sum + d.amount, 0);
 
   // 2. Pending Bazaar Entries (Pending status)
-  const pendingBazaarList = bazaarEntries.filter(entry => entry.status === 'Pending');
+  const pendingBazaarList = monthBazaarEntries.filter(entry => entry.status === 'Pending');
   const totalPendingBazaarCount = pendingBazaarList.length;
   const totalPendingBazaarAmount = pendingBazaarList.reduce((sum, b) => sum + b.price, 0);
 
   // 3. Pending Deposits (Pending status)
-  const pendingDepositsList = deposits.filter(d => d.status === 'Pending');
+  const pendingDepositsList = monthDeposits.filter(d => d.status === 'Pending');
   const totalPendingDepositsCount = pendingDepositsList.length;
   const totalPendingDepositsAmount = pendingDepositsList.reduce((sum, d) => sum + d.amount, 0);
 
-  // 4. Most & Least Meals (For Active Members)
+  // 4. Most & Least Meals (For Active Members in Active Month)
   const activeUsers = allUsers.filter(u => u.isActive);
   const memberMealCalculations = activeUsers.map(user => {
     const userSheet = meals.find(sheet => sheet.userId === user.id);
     let ownMealsCount = 0;
     let guestMealsCount = 0;
     if (userSheet) {
-      Object.keys(userSheet.meals).forEach(date => {
+      monthDates.forEach(date => {
         if (isVacation(user.id, date)) return;
         const m = userSheet.meals[date];
+        if (!m) return;
         ownMealsCount += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
         guestMealsCount += (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
       });
@@ -241,8 +255,8 @@ export default function DashboardTab({
   const mostMealsRecord = sortedMembersByMeals.length > 0 ? sortedMembersByMeals[0] : null;
   const leastMealsRecord = sortedMembersByMeals.length > 0 ? sortedMembersByMeals[sortedMembersByMeals.length - 1] : null;
 
-  // 5. Highest Expense (Single approved bazaar entry or standard utility expense)
-  const bazaarExpenses = bazaarEntries
+  // 5. Highest Expense (Single approved bazaar entry or standard utility expense in active month)
+  const bazaarExpenses = monthBazaarEntries
     .filter(b => b.status === 'Approved')
     .map(b => ({
       title: b.items,
@@ -250,7 +264,7 @@ export default function DashboardTab({
       date: b.date,
       type: 'Bazaar'
     }));
-  const otherExpenses = expenses.map(e => ({
+  const otherExpenses = monthExpenses.map(e => ({
     title: `${e.category}${e.note ? ` (${e.note})` : ''}`,
     amount: e.amount,
     date: e.date,
@@ -261,8 +275,8 @@ export default function DashboardTab({
     ? [...allExpenseItems].sort((a, b) => b.amount - a.amount)[0]
     : null;
 
-  // 6. Highest Deposit (Single approved deposit)
-  const approvedDepositsList = deposits
+  // 6. Highest Deposit (Single approved deposit in active month)
+  const approvedDepositsList = monthDeposits
     .filter(d => d.status === 'Approved')
     .map(d => {
       const user = allUsers.find(u => u.id === d.userId);
@@ -279,10 +293,9 @@ export default function DashboardTab({
     : null;
 
   // 7. Interactive Chart Data Processing
-  // Prepare daily values for July 2026 (days 1 to 31)
-  const dailyChartData = Array.from({ length: 31 }, (_, i) => {
+  // Prepare daily values for activeMonth
+  const dailyChartData = monthDates.map((dateStr, i) => {
     const dayNum = i + 1;
-    const dateStr = `2026-07-${dayNum < 10 ? '0' + dayNum : dayNum}`;
 
     // Total meals on this day
     const dayMealsTotal = meals.reduce((sum, sheet) => {
@@ -295,23 +308,23 @@ export default function DashboardTab({
     }, 0);
 
     // Total approved bazaar expense on this day
-    const dayBazaarTotal = bazaarEntries
+    const dayBazaarTotal = monthBazaarEntries
       .filter(b => b.status === 'Approved' && b.date === dateStr)
       .reduce((sum, b) => sum + b.price, 0);
 
     // General overhead expense on this day
-    const dayOtherTotal = expenses
+    const dayOtherTotal = monthExpenses
       .filter(e => e.date === dateStr)
       .reduce((sum, e) => sum + e.amount, 0);
 
     // Total approved deposit on this day
-    const dayDepositTotal = deposits
+    const dayDepositTotal = monthDeposits
       .filter(d => d.status === 'Approved' && d.date === dateStr)
       .reduce((sum, d) => sum + d.amount, 0);
 
     return {
       day: dayNum,
-      shortDate: `Jul ${dayNum}`,
+      shortDate: `${shortMonthLabel} ${dayNum}`,
       meals: parseFloat(dayMealsTotal.toFixed(1)),
       expense: dayBazaarTotal + dayOtherTotal,
       bazaar: dayBazaarTotal,
@@ -320,16 +333,16 @@ export default function DashboardTab({
     };
   });
 
-  // Category distribution for expenses Pie Chart
+  // Category distribution for expenses Pie Chart (Active Month)
   const expenseCategoriesDistribution = [
-    { name: 'Bazaar/Grocery', value: totalBazaarCost, color: '#10b981' }, // emerald
-    { name: 'Gas Utilities', value: expenses.filter(e => e.category === 'Gas').reduce((s, e) => s + e.amount, 0), color: '#f59e0b' }, // amber
-    { name: 'Power/Electricity', value: expenses.filter(e => e.category === 'Electricity').reduce((s, e) => s + e.amount, 0), color: '#3b82f6' }, // blue
-    { name: 'Broadband/Internet', value: expenses.filter(e => e.category === 'Internet').reduce((s, e) => s + e.amount, 0), color: '#8b5cf6' }, // violet
-    { name: 'Water Utilities', value: expenses.filter(e => e.category === 'Water').reduce((s, e) => s + e.amount, 0), color: '#06b6d4' }, // cyan
-    { name: 'Mess Cleaning', value: expenses.filter(e => e.category === 'Cleaning').reduce((s, e) => s + e.amount, 0), color: '#ec4899' }, // pink
-    { name: 'Cook/Maid Salaries', value: expenses.filter(e => e.category === 'Maid').reduce((s, e) => s + e.amount, 0), color: '#14b8a6' }, // teal
-    { name: 'Other Overheads', value: expenses.filter(e => e.category === 'Others').reduce((s, e) => s + e.amount, 0), color: '#64748b' } // slate
+    { name: 'Bazaar/Grocery', value: totalBazaarCost, color: '#10b981' },
+    { name: 'Gas Utilities', value: monthExpenses.filter(e => e.category === 'Gas').reduce((s, e) => s + e.amount, 0), color: '#f59e0b' },
+    { name: 'Power/Electricity', value: monthExpenses.filter(e => e.category === 'Electricity').reduce((s, e) => s + e.amount, 0), color: '#3b82f6' },
+    { name: 'Broadband/Internet', value: monthExpenses.filter(e => e.category === 'Internet').reduce((s, e) => s + e.amount, 0), color: '#8b5cf6' },
+    { name: 'Water Utilities', value: monthExpenses.filter(e => e.category === 'Water').reduce((s, e) => s + e.amount, 0), color: '#06b6d4' },
+    { name: 'Mess Cleaning', value: monthExpenses.filter(e => e.category === 'Cleaning').reduce((s, e) => s + e.amount, 0), color: '#ec4899' },
+    { name: 'Cook/Maid Salaries', value: monthExpenses.filter(e => e.category === 'Maid').reduce((s, e) => s + e.amount, 0), color: '#14b8a6' },
+    { name: 'Other Overheads', value: monthExpenses.filter(e => e.category === 'Others').reduce((s, e) => s + e.amount, 0), color: '#64748b' }
   ].filter(item => item.value > 0);
 
   // If empty, add a small mock category to avoid blank pie charts
@@ -337,26 +350,31 @@ export default function DashboardTab({
     expenseCategoriesDistribution.push({ name: 'General Outflow', value: 100, color: '#10b981' });
   }
 
-  // USER INDIVIDUAL SUMMARY
+  // USER INDIVIDUAL SUMMARY (Scoped to Active Month)
   const userMealsSheet = meals.find(sheet => sheet.userId === currentUser.id);
   
-  // Calculate total meals for current user
+  // Calculate total meals for current user in active month
   let userTotalMeals = 0;
   let userGuestMeals = 0;
   if (userMealsSheet) {
-    Object.keys(userMealsSheet.meals).forEach(date => {
+    monthDates.forEach(date => {
+      if (isVacation(currentUser.id, date)) return;
       const m = userMealsSheet.meals[date];
+      if (!m) return;
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-      const guest = (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
+      const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
       userTotalMeals += own;
       userGuestMeals += guest;
     });
   }
 
   const userEstimatedBill = (userTotalMeals + userGuestMeals) * currentMealRate;
-  const userTotalDeposits = deposits
-    .filter(d => d.userId === currentUser.id && d.status !== 'Pending' && d.status !== 'Rejected')
-    .reduce((sum, d) => sum + d.amount, 0);
+  const userApprovedMonthDeposits = monthDeposits
+    .filter(d => d.userId === currentUser.id && d.status !== 'Pending' && d.status !== 'Rejected');
+  const userTotalDeposits = userApprovedMonthDeposits.reduce((sum, d) => sum + d.amount, 0);
+  const lastUserDepositDate = userApprovedMonthDeposits.length > 0
+    ? [...userApprovedMonthDeposits].sort((a, b) => b.date.localeCompare(a.date))[0].date
+    : null;
   const userCarryForward = currentUser.carryForward || 0;
   const userCurrentBalance = userCarryForward + userTotalDeposits - userEstimatedBill;
 
@@ -373,9 +391,9 @@ export default function DashboardTab({
   const targetUser = allUsers.find(u => u.id === targetUserId) || currentUser;
   const targetMealsSheet = meals.find(sheet => sheet.userId === targetUserId);
   const tomorrowMeals = targetMealsSheet?.meals[tomorrow] || {
-    breakfast: true,
-    lunch: true,
-    dinner: true,
+    breakfast: false,
+    lunch: false,
+    dinner: false,
     guestBreakfast: 0,
     guestLunch: 0,
     guestDinner: 0
@@ -425,7 +443,7 @@ export default function DashboardTab({
       if (sheet.userId === targetUserId) {
         sheetFound = true;
         const currentDayMeals = sheet.meals[tomorrow] || {
-          breakfast: true, lunch: true, dinner: true,
+          breakfast: false, lunch: false, dinner: false,
           guestBreakfast: 0, guestLunch: 0, guestDinner: 0
         };
         return {
@@ -447,9 +465,9 @@ export default function DashboardTab({
         userId: targetUserId,
         meals: {
           [tomorrow]: {
-            breakfast: mealType === 'breakfast' ? false : true,
-            lunch: mealType === 'lunch' ? false : true,
-            dinner: mealType === 'dinner' ? false : true,
+            breakfast: mealType === 'breakfast',
+            lunch: mealType === 'lunch',
+            dinner: mealType === 'dinner',
             guestBreakfast: 0,
             guestLunch: 0,
             guestDinner: 0
@@ -496,7 +514,7 @@ export default function DashboardTab({
       if (sheet.userId === targetUserId) {
         sheetFound = true;
         const currentDayMeals = sheet.meals[tomorrow] || {
-          breakfast: true, lunch: true, dinner: true,
+          breakfast: false, lunch: false, dinner: false,
           guestBreakfast: 0, guestLunch: 0, guestDinner: 0
         };
         const currentCount = currentDayMeals[mealType] || 0;
@@ -520,9 +538,9 @@ export default function DashboardTab({
         userId: targetUserId,
         meals: {
           [tomorrow]: {
-            breakfast: true,
-            lunch: true,
-            dinner: true,
+            breakfast: false,
+            lunch: false,
+            dinner: false,
             guestBreakfast: mealType === 'guestBreakfast' ? Math.max(0, delta) : 0,
             guestLunch: mealType === 'guestLunch' ? Math.max(0, delta) : 0,
             guestDinner: mealType === 'guestDinner' ? Math.max(0, delta) : 0
@@ -556,13 +574,13 @@ export default function DashboardTab({
           </h1>
           <p className="text-slate-500 dark:text-slate-400 mt-1">
             {isManagerOrAdmin 
-              ? 'Here is an overview of the elite mess operation and expense stats for July 2026.'
+              ? `Here is an overview of the elite mess operation and expense stats for ${activeMonthLabel}.`
               : 'Keep track of your personal meals, estimated bill, and deposits.'}
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
           <Calendar size={14} className="text-emerald-600 dark:text-emerald-400" />
-          <span>System Date: July 18, 2026</span>
+          <span>{isBangla ? 'সক্রিয় তারিখ' : 'System Date'}: {formatDateDisplay(today, settings.language)}</span>
         </div>
       </div>
 
@@ -735,7 +753,9 @@ export default function DashboardTab({
               </div>
             </div>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 font-medium">
-              {settings.language === 'Bangla' ? 'শেষ জমা: ১৫ই জুলাই, ২০২৬' : 'Last Deposit: July 15, 2026'}
+              {lastUserDepositDate
+                ? `${isBangla ? 'শেষ জমা' : 'Last Deposit'}: ${formatDateDisplay(lastUserDepositDate, settings.language)}`
+                : (isBangla ? `${activeMonthLabel}-এ কোনো জমা নেই` : `No deposits in ${activeMonthLabel}`)}
             </p>
             <div className="absolute bottom-0 left-0 w-full h-1 bg-violet-500/20 group-hover:bg-violet-500 transition-all"></div>
           </div>
@@ -800,7 +820,7 @@ export default function DashboardTab({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-650 dark:text-slate-350 uppercase tracking-wide flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Today's Mess Meals (July 18):
+                  Today's Mess Meals ({formatMonthDayLabel(today)}):
                 </span>
                 <span className="text-xs font-black text-slate-800 dark:text-white bg-white dark:bg-slate-900 px-3 py-1 rounded-xl shadow-xs border border-slate-100 dark:border-slate-800">
                   {todayTotalMealsCount} Meals
@@ -809,7 +829,7 @@ export default function DashboardTab({
               <div className="flex items-center justify-between sm:border-l sm:border-slate-150 dark:sm:border-slate-800 sm:pl-4">
                 <span className="text-xs font-bold text-slate-650 dark:text-slate-350 uppercase tracking-wide flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                  Tomorrow's Mess Meals (July 19):
+                  Tomorrow's Mess Meals ({formatMonthDayLabel(tomorrow)}):
                 </span>
                 <span className="text-xs font-black text-slate-800 dark:text-white bg-white dark:bg-slate-900 px-3 py-1 rounded-xl shadow-xs border border-slate-100 dark:border-slate-800">
                   {tomorrowTotalMealsCount} Meals
@@ -823,7 +843,7 @@ export default function DashboardTab({
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5 border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
                 <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                  Tomorrow's Meal Reservation <span className="text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded uppercase tracking-wider">Tomorrow: July 19</span>
+                  Tomorrow's Meal Reservation <span className="text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded uppercase tracking-wider">Tomorrow: {formatMonthDayLabel(tomorrow)}</span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Update active meals and expected guest meals before the deadline at <span className="font-semibold text-emerald-600 dark:text-emerald-400">{settings.mealLockTime} today</span>.
@@ -1069,11 +1089,11 @@ export default function DashboardTab({
 
               {/* X Axis Labels */}
               <div className="flex justify-between items-center text-[10px] font-semibold text-slate-400 dark:text-slate-500 px-6 border-t border-slate-100 dark:border-slate-800 pt-2">
-                <span>July 01</span>
-                <span>July 05</span>
-                <span>July 10</span>
-                <span>July 15</span>
-                <span>July 18 (Today)</span>
+                <span>{shortMonthLabel} 01</span>
+                <span>{shortMonthLabel} 05</span>
+                <span>{shortMonthLabel} 10</span>
+                <span>{shortMonthLabel} 15</span>
+                <span>{shortMonthLabel} {today.split('-')[2]} (Today)</span>
               </div>
             </div>
           </div>

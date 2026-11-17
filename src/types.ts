@@ -94,8 +94,29 @@ export interface ActivityLog {
   time?: string;
 }
 
+export interface ClosedMonthRecord {
+  month: string; // YYYY-MM
+  closedAt: string;
+  closedBy: string;
+  mealRate: number;
+  totalMeals: number;
+  totalExpenses: number;
+  totalDeposits: number;
+  memberSummaries?: Array<{
+    userId: string;
+    name: string;
+    totalMeals: number;
+    billAmount: number;
+    deposits: number;
+    carryForward: number;
+    closingBalance: number;
+  }>;
+}
+
 export interface SystemSettings {
   systemName: string;
+  activeMonth?: string; // YYYY-MM active billing month
+  closedMonths?: ClosedMonthRecord[];
   mealLockTime: string; // e.g. "22:00"
   defaultMealOn: boolean;
   currency: string; // e.g. "৳" or "$"
@@ -103,7 +124,7 @@ export interface SystemSettings {
   isMonthClosed: boolean;
   language: 'English' | 'Bangla';
   lockOverride?: boolean;
-  theme?: 'Light' | 'Dark' | 'Cosmic Slate' | 'Emerald Forest';
+  theme?: 'Light' | 'Dark' | 'Cosmic Slate' | 'Emerald Forest' | 'Rose Quartz';
   
   // Manager Permissions Toggles
   mgrCanApproveBazaar?: boolean;

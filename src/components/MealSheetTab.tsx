@@ -15,6 +15,14 @@ import {
 } from 'lucide-react';
 import { User, MemberMealSheet, MealStatus, SystemSettings, VacationPeriod } from '../types';
 import { useFeedback } from './FeedbackContext';
+import {
+  getRealCurrentMonth,
+  getDaysInMonth,
+  getMonthDates,
+  formatMonthLabel,
+  getEffectiveDatesForMonth,
+  getMonthPickerOptions
+} from '../utils/dateUtils';
 
 interface MealSheetTabProps {
   currentUser: User;
@@ -50,22 +58,25 @@ export default function MealSheetTab({
 
   const isManagerOrAdmin = role === 'Admin' || role === 'Meal Manager';
   const isBangla = settings.language === 'Bangla';
-  const [selectedMonth, setSelectedMonth] = useState('2026-07');
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+  const { today, tomorrow } = getEffectiveDatesForMonth(activeMonth);
+  const [selectedMonth, setSelectedMonth] = useState(activeMonth);
   const [searchQuery, setSearchQuery] = useState('');
   const [focusedCell, setFocusedCell] = useState<{ userId: string; date: string } | null>(null);
 
-  const getDaysInMonth = (monthStr: string) => {
-    const [year, month] = monthStr.split('-').map(Number);
-    return new Date(year, month, 0).getDate();
-  };
+  React.useEffect(() => {
+    setSelectedMonth(activeMonth);
+  }, [activeMonth]);
 
   const daysInMonth = getDaysInMonth(selectedMonth);
-  
-  // Generating list of date strings for selected month
-  const dates = Array.from({ length: daysInMonth }, (_, i) => {
-    const dayNum = i + 1;
-    return `${selectedMonth}-${dayNum < 10 ? '0' + dayNum : dayNum}`;
-  });
+  const dates = getMonthDates(selectedMonth);
+  const monthOptions = getMonthPickerOptions(
+    activeMonth,
+    [
+      selectedMonth,
+      ...(settings.closedMonths?.map(c => c.month) || [])
+    ]
+  );
 
   // Cell Editing state
   const [editingCell, setEditingCell] = useState<{
@@ -77,20 +88,24 @@ export default function MealSheetTab({
   } | null>(null);
 
   // Vacation states
-  const [vacationStart, setVacationStart] = useState(`${selectedMonth}-19`);
-  const [vacationEnd, setVacationEnd] = useState(`${selectedMonth}-25`);
+  const defaultVacStartDay = today.startsWith(selectedMonth) ? today.split('-')[2] : '01';
+  const defaultVacEndNum = Math.min(Number(defaultVacStartDay) + 6, daysInMonth);
+  const [vacationStart, setVacationStart] = useState(`${selectedMonth}-${defaultVacStartDay}`);
+  const [vacationEnd, setVacationEnd] = useState(`${selectedMonth}-${String(defaultVacEndNum).padStart(2, '0')}`);
   const [vacationUser, setVacationUser] = useState(currentUser.id);
   const [vacationError, setVacationError] = useState('');
   const [editingVacationId, setEditingVacationId] = useState<string | null>(null);
 
   // Update vacation defaults when month or currentUser changes
   React.useEffect(() => {
-    setVacationStart(`${selectedMonth}-19`);
-    setVacationEnd(`${selectedMonth}-25`);
+    const startDay = today.startsWith(selectedMonth) ? today.split('-')[2] : '01';
+    const endDay = Math.min(Number(startDay) + 6, getDaysInMonth(selectedMonth));
+    setVacationStart(`${selectedMonth}-${startDay}`);
+    setVacationEnd(`${selectedMonth}-${String(endDay).padStart(2, '0')}`);
     if (!editingVacationId) {
       setVacationUser(currentUser.id);
     }
-  }, [selectedMonth, currentUser.id, editingVacationId]);
+  }, [selectedMonth, currentUser.id, editingVacationId, today]);
 
   const handleEditVacationClick = (vp: VacationPeriod) => {
     setEditingVacationId(vp.id);
@@ -159,14 +174,15 @@ export default function MealSheetTab({
   // Lock status check for a member
   const checkIsLockedForMember = (date: string): { locked: boolean; reason?: string } => {
     if (isManagerOrAdmin) return { locked: false };
-    if (settings.isMonthClosed) return { locked: true, reason: 'Month is closed' };
+    if (settings.isMonthClosed && date.startsWith(activeMonth)) return { locked: true, reason: 'Month is closed' };
+    if (date.slice(0, 7) < activeMonth) return { locked: true, reason: 'Past month is locked' };
 
     // Members cannot edit past dates or today
-    if (date <= '2026-07-18') {
+    if (date <= today) {
       return { locked: true, reason: 'Past and today\'s meals cannot be modified by members' };
     }
 
-    const isTomorrow = date === '2026-07-19';
+    const isTomorrow = date === tomorrow;
     if (isTomorrow) {
       if (settings.lockOverride) return { locked: false }; // Manager override is active
 
@@ -190,7 +206,7 @@ export default function MealSheetTab({
     const dayMeal = isUserVacationActive 
       ? { breakfast: false, lunch: false, dinner: false, guestBreakfast: 0, guestLunch: 0, guestDinner: 0 }
       : (sheet.meals[date] || {
-          breakfast: true, lunch: true, dinner: true,
+          breakfast: false, lunch: false, dinner: false,
           guestBreakfast: 0, guestLunch: 0, guestDinner: 0
         });
 
@@ -248,7 +264,7 @@ export default function MealSheetTab({
         return; // skip meals, they are OFF automatically during vacation
       }
       const m = sheet.meals[date] || {
-        breakfast: true, lunch: true, dinner: true,
+        breakfast: false, lunch: false, dinner: false,
         guestBreakfast: 0, guestLunch: 0, guestDinner: 0
       };
       // breakfast = 0.5 meal, lunch = 1, dinner = 1
@@ -274,7 +290,7 @@ export default function MealSheetTab({
     visibleMeals.forEach(sheet => {
       if (isVacation(sheet.userId, dateStr)) return;
       const m = sheet.meals[dateStr] || {
-        breakfast: true, lunch: true, dinner: true,
+        breakfast: false, lunch: false, dinner: false,
         guestBreakfast: 0, guestLunch: 0, guestDinner: 0
       };
       ownTotal += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
@@ -371,7 +387,7 @@ export default function MealSheetTab({
     const dayMeal = isVacation(sheet.userId, date)
       ? { breakfast: false, lunch: false, dinner: false, guestBreakfast: 0, guestLunch: 0, guestDinner: 0 }
       : (sheet.meals[date] || {
-          breakfast: true, lunch: true, dinner: true,
+          breakfast: false, lunch: false, dinner: false,
           guestBreakfast: 0, guestLunch: 0, guestDinner: 0
         });
 
@@ -413,7 +429,7 @@ export default function MealSheetTab({
     // Dynamic logging for audit logs
     const targetSheet = meals.find(sheet => sheet.userId === editingCell.userId);
     const oldDayMeal = targetSheet?.meals[editingCell.date] || {
-      breakfast: true, lunch: true, dinner: true,
+      breakfast: false, lunch: false, dinner: false,
       guestBreakfast: 0, guestLunch: 0, guestDinner: 0
     };
 
@@ -462,7 +478,7 @@ export default function MealSheetTab({
         <div>
           <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <FileSpreadsheet className="text-emerald-600 dark:text-emerald-400" size={22} />
-            Digital Meal Sheet ({selectedMonth === '2026-06' ? 'June 2026' : selectedMonth === '2026-07' ? 'July 2026' : selectedMonth === '2026-08' ? 'August 2026' : selectedMonth})
+            Digital Meal Sheet ({formatMonthLabel(selectedMonth, settings.language)})
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {isManagerOrAdmin 
@@ -508,15 +524,17 @@ export default function MealSheetTab({
           </div>
 
           {/* Month selector */}
-          <div className="relative w-full sm:w-48">
+          <div className="relative w-full sm:w-52">
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-white font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
-              <option value="2026-06">June 2026</option>
-              <option value="2026-07">July 2026</option>
-              <option value="2026-08">August 2026</option>
+              {monthOptions.map(m => (
+                <option key={m} value={m}>
+                  {formatMonthLabel(m, settings.language)}{m === activeMonth ? (isBangla ? ' (সক্রিয়)' : ' (Active)') : ''}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -546,7 +564,7 @@ export default function MealSheetTab({
               {/* Sticky Dates Columns */}
               {dates.map((date, index) => {
                 const dayNum = index + 1;
-                const isToday = date === `${selectedMonth}-18` || (selectedMonth === '2026-07' && dayNum === 18);
+                const isToday = date === today;
                 return (
                   <th 
                     key={date} 
@@ -596,9 +614,9 @@ export default function MealSheetTab({
                     {/* Dates cells */}
                     {dates.map((date) => {
                       const { cellLabel, bgColorClass, textColorClass, dayMeal, isLocked } = getCellData(sheet, date);
-                      const isToday = date === '2026-07-18';
+                      const isToday = date === today;
                       const isCellFocused = focusedCell && focusedCell.userId === sheet.userId && focusedCell.date === date;
-                      const canEdit = isManagerOrAdmin || (sheet.userId === currentUser.id && date >= '2026-07-19');
+                      const canEdit = isManagerOrAdmin || (sheet.userId === currentUser.id && !checkIsLockedForMember(date).locked);
 
                       return (
                         <td 
@@ -612,7 +630,7 @@ export default function MealSheetTab({
                           {/* Elegant Hover Breakdown Tooltip */}
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-950 text-slate-200 text-[10px] rounded-lg p-2.5 opacity-0 pointer-events-none group-hover/cell:opacity-100 transition-opacity duration-200 z-50 shadow-xl border border-slate-800">
                             <p className="font-bold border-b border-slate-800 pb-1 mb-1.5 text-white flex justify-between">
-                              <span>{selectedMonth === '2026-06' ? 'June' : selectedMonth === '2026-07' ? 'July' : selectedMonth === '2026-08' ? 'August' : 'Selected'} {date.split('-')[2]}</span>
+                              <span>{formatMonthLabel(selectedMonth, settings.language)} {date.split('-')[2]}</span>
                               {isLocked && <Lock size={10} className="text-slate-400" />}
                             </p>
                             <div className="grid grid-cols-2 gap-y-1 text-[10px]">
@@ -665,7 +683,7 @@ export default function MealSheetTab({
                 {/* Dynamically calculated daily totals columns */}
                 {dates.map((date) => {
                   const colTotals = calculateDailyColumnTotals(date);
-                  const isToday = date === '2026-07-18';
+                  const isToday = date === today;
                   return (
                     <td 
                       key={`foot-${date}`}
@@ -969,8 +987,8 @@ export default function MealSheetTab({
                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Start Date</label>
                 <input
                   type="date"
-                  min="2026-07-01"
-                  max="2026-07-31"
+                  min={`${selectedMonth}-01`}
+                  max={`${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`}
                   value={vacationStart}
                   onChange={(e) => setVacationStart(e.target.value)}
                   className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-semibold"
@@ -980,8 +998,8 @@ export default function MealSheetTab({
                 <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">End Date</label>
                 <input
                   type="date"
-                  min="2026-07-01"
-                  max="2026-07-31"
+                  min={`${selectedMonth}-01`}
+                  max={`${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`}
                   value={vacationEnd}
                   onChange={(e) => setVacationEnd(e.target.value)}
                   className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-semibold"
@@ -1092,16 +1110,16 @@ export default function MealSheetTab({
                 <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
                   settings.lockOverride 
                     ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
-                    : checkIsLockedForMember('2026-07-19').locked
+                    : checkIsLockedForMember(tomorrow).locked
                       ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/15'
                       : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
                 }`}>
-                  {settings.lockOverride ? '🔓 OVERRIDDEN' : checkIsLockedForMember('2026-07-19').locked ? '🔒 LOCKED' : '🔓 OPEN'}
+                  {settings.lockOverride ? '🔓 OVERRIDDEN' : checkIsLockedForMember(tomorrow).locked ? '🔒 LOCKED' : '🔓 OPEN'}
                 </span>
                 <p className="text-xs text-slate-400 dark:text-slate-500">
                   {settings.lockOverride 
                     ? 'Managers have temporarily suspended the lock. Members can edit.' 
-                    : checkIsLockedForMember('2026-07-19').locked 
+                    : checkIsLockedForMember(tomorrow).locked 
                       ? 'Daily lock is in force. Only managers can make changes.' 
                       : 'Standard lockout applies at ' + settings.mealLockTime + ' today.'}
                 </p>

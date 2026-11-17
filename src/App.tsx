@@ -7,10 +7,10 @@ import {
   Lock,
   ChevronRight,
   Menu,
-  Moon,
-  Sun,
   X,
-  Bell
+  Bell,
+  Palette,
+  Check
 } from 'lucide-react';
 
 // Domain types
@@ -25,8 +25,17 @@ import {
   ActivityLog, 
   SystemSettings,
   VacationPeriod,
-  AppNotification
+  AppNotification,
+  ClosedMonthRecord
 } from './types';
+import {
+  getRealCurrentMonth,
+  getRealTodayStr,
+  getMonthDates,
+  getNextMonth,
+  formatMonthLabel,
+  getEffectiveDatesForMonth
+} from './utils/dateUtils';
 
 // Dummy initial data
 import { 
@@ -172,7 +181,7 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((u: User) => ({ ...u, carryForward: 0 }));
+          return parsed;
         }
       } catch (e) {}
     }
@@ -239,11 +248,37 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.systemName) return parsed;
+        if (parsed && parsed.systemName) {
+          return {
+            ...initialSettings,
+            ...parsed,
+            activeMonth: parsed.activeMonth || getRealCurrentMonth(),
+            closedMonths: Array.isArray(parsed.closedMonths) ? parsed.closedMonths : []
+          };
+        }
       } catch (e) {}
     }
     return initialSettings;
   });
+
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+
+  type ThemePreset = NonNullable<SystemSettings['theme']>;
+  const [userThemes, setUserThemes] = useState<Record<string, ThemePreset>>(() => {
+    const saved = localStorage.getItem('mms_user_themes');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch (e) {}
+    }
+    return {};
+  });
+  const [themeMenuOpen, setThemeMenuOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem('mms_user_themes', JSON.stringify(userThemes));
+  }, [userThemes]);
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
     const saved = localStorage.getItem('mms_activity_logs');
@@ -315,6 +350,9 @@ export default function App() {
   }));
   const [currentPersona, setCurrentPersona] = useState<UserRole>('Member');
   const [loadingSession, setLoadingSession] = useState<boolean>(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false);
+  const [authRedirectError, setAuthRedirectError] = useState<string>('');
+  const isRecoveryRef = React.useRef<boolean>(false);
 
   // Synchronize database records from Supabase and subscribe to Realtime postgres_changes
   useEffect(() => {
@@ -487,9 +525,75 @@ export default function App() {
       return;
     }
 
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlError =
+      hashParams.get('error_description') ||
+      searchParams.get('error_description') ||
+      hashParams.get('error') ||
+      searchParams.get('error');
+    const urlErrorCode = hashParams.get('error_code') || searchParams.get('error_code');
+    const typeParam = hashParams.get('type') || searchParams.get('type');
+    const tokenHash = searchParams.get('token_hash');
+
+    if (urlError) {
+      const isExpired = urlErrorCode === 'otp_expired' || urlError.toLowerCase().includes('expired');
+      const friendlyMsg = isExpired
+        ? 'Password reset link is invalid or has expired. Please request a new reset link.'
+        : decodeURIComponent(urlError.replace(/\+/g, ' '));
+      setAuthRedirectError(friendlyMsg);
+      isRecoveryRef.current = false;
+      setIsPasswordRecovery(false);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (typeParam === 'recovery') {
+      isRecoveryRef.current = true;
+      setIsPasswordRecovery(true);
+    }
+
+    if (tokenHash && typeParam === 'recovery') {
+      (async () => {
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'recovery',
+        });
+        if (otpError) {
+          setAuthRedirectError(otpError.message || 'Password reset link verification failed.');
+          isRecoveryRef.current = false;
+          setIsPasswordRecovery(false);
+        } else {
+          isRecoveryRef.current = true;
+          setIsPasswordRecovery(true);
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setLoadingSession(false);
+      })();
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setLoadingSession(true);
+      if (event === 'PASSWORD_RECOVERY') {
+        isRecoveryRef.current = true;
+        setIsPasswordRecovery(true);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setLoadingSession(false);
+        return;
+      }
+
+      if (event === 'SIGNED_OUT') {
+        isRecoveryRef.current = false;
+        setIsPasswordRecovery(false);
+        setIsAuthenticated(false);
+        setLoadingSession(false);
+        return;
+      }
+
+      if (isRecoveryRef.current && session?.user) {
+        setIsPasswordRecovery(true);
+        setLoadingSession(false);
+        return;
+      }
+
       if (session?.user) {
+        setLoadingSession(true);
         try {
           const { data: dbUser, error } = await supabase
             .from('users')
@@ -644,6 +748,18 @@ export default function App() {
     }
   }, [currentUser, currentTab, settings]);
 
+  // Resolve personal theme per user (falls back to global default settings.theme)
+  const themeUserKey = currentUser?.id || 'default';
+  const activeUserTheme: ThemePreset =
+    userThemes[themeUserKey] || settings.theme || 'Light';
+
+  const handleUpdateUserTheme = (theme: ThemePreset) => {
+    setUserThemes(prev => ({
+      ...prev,
+      [themeUserKey]: theme
+    }));
+  };
+
   // Dark Mode tailwind class toggling
   useEffect(() => {
     const root = window.document.documentElement;
@@ -654,13 +770,13 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Synchronize Theme Preset Classes
+  // Synchronize Theme Preset Classes for active user
   useEffect(() => {
     const root = window.document.documentElement;
     // Remove all previous theme classes
     root.classList.remove('theme-light', 'theme-dark', 'theme-cosmic', 'theme-emerald', 'theme-pink');
     
-    const theme = settings.theme || 'Light';
+    const theme = activeUserTheme || 'Light';
     if (theme === 'Light') {
       root.classList.add('theme-light');
       setDarkMode(false);
@@ -677,7 +793,7 @@ export default function App() {
       root.classList.add('theme-pink');
       setDarkMode(true);
     }
-  }, [settings.theme]);
+  }, [activeUserTheme]);
 
   // Handle Authentication Success
   const handleLoginSuccess = (user: User) => {
@@ -877,7 +993,7 @@ export default function App() {
       type,
       title,
       description,
-      date: '2026-07-18', // July 2026 current month hardcoded context
+      date: getRealTodayStr(),
       isRead: false,
       targetUserId,
       linkToTab,
@@ -1042,8 +1158,8 @@ export default function App() {
     setIsAuthenticated(true);
   };
 
-  // Guard Screen: Render LoginScreen if not authenticated
-  if (!isAuthenticated) {
+  // Guard Screen: Render LoginScreen if not authenticated OR during password recovery
+  if (!isAuthenticated || isPasswordRecovery) {
     return (
       <div className={darkMode ? 'dark' : ''}>
         <LoginScreen 
@@ -1051,6 +1167,27 @@ export default function App() {
           onLanguageChange={(lang) => setSettings(prev => ({ ...prev, language: lang }))}
           onDemoLogin={handleDemoLogin}
           onLocalLogin={handleLocalLogin}
+          isPasswordRecovery={isPasswordRecovery}
+          initialError={authRedirectError}
+          onClearInitialError={() => setAuthRedirectError('')}
+          onPasswordResetSuccess={async () => {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            isRecoveryRef.current = false;
+            setIsPasswordRecovery(false);
+            setIsAuthenticated(false);
+            if (isSupabaseConfigured) {
+              await supabase.auth.signOut();
+            }
+          }}
+          onCancelPasswordRecovery={async () => {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            isRecoveryRef.current = false;
+            setIsPasswordRecovery(false);
+            setIsAuthenticated(false);
+            if (isSupabaseConfigured) {
+              await supabase.auth.signOut();
+            }
+          }}
         />
       </div>
     );
@@ -1063,14 +1200,13 @@ export default function App() {
   // Update tomorrow's meal reservations (Dashboard)
   const handleUpdateTomorrowMeals = (updatedStatus: { breakfast: boolean; lunch: boolean; dinner: boolean }) => {
     if (settings.isMonthClosed) return;
+    const tomorrowDate = getEffectiveDatesForMonth(activeMonth).tomorrow;
 
     // Find current user's meal sheet
     setMeals(prevSheets => {
       return prevSheets.map(sheet => {
         if (sheet.userId === currentUser.id) {
           const updatedMeals = { ...sheet.meals };
-          const tomorrowDate = '2026-07-19'; // hardcoded target month tomorrow date
-          
           updatedMeals[tomorrowDate] = {
             ...updatedMeals[tomorrowDate],
             ...updatedStatus
@@ -1087,7 +1223,7 @@ export default function App() {
 
     logAction(
       'Meal Reservation Update',
-      `Updated tomorrow's (${'2026-07-19'}) meals: Breakfast=${updatedStatus.breakfast ? 'ON' : 'OFF'}, Lunch=${updatedStatus.lunch ? 'ON' : 'OFF'}, Dinner=${updatedStatus.dinner ? 'ON' : 'OFF'}`
+      `Updated tomorrow's (${tomorrowDate}) meals: Breakfast=${updatedStatus.breakfast ? 'ON' : 'OFF'}, Lunch=${updatedStatus.lunch ? 'ON' : 'OFF'}, Dinner=${updatedStatus.dinner ? 'ON' : 'OFF'}`
     );
   };
 
@@ -1528,10 +1664,11 @@ export default function App() {
 
   // Publish Notice
   const handleAddNotice = (notice: Omit<Notice, 'id' | 'date' | 'authorId' | 'authorName'>) => {
+    const { today } = getEffectiveDatesForMonth(activeMonth);
     const newNotice: Notice = {
       ...notice,
       id: `not-${Date.now()}`,
-      date: '2026-07-18', // today's date
+      date: today,
       authorId: currentUser.id,
       authorName: currentUser.name
     };
@@ -1618,19 +1755,18 @@ export default function App() {
 
     setUsers(prev => [...prev, newUser]);
 
-    // Create a corresponding blank meal sheet for this month
+    // Create a corresponding blank meal sheet for the active month
     const blankMeals: MemberMealSheet['meals'] = {};
-    for (let day = 1; day <= 31; day++) {
-      const dateStr = `2026-07-${day < 10 ? '0' + day : day}`;
+    getMonthDates(activeMonth).forEach((dateStr) => {
       blankMeals[dateStr] = {
-        breakfast: user.defaultMealOn,
-        lunch: user.defaultMealOn,
-        dinner: user.defaultMealOn,
+        breakfast: false,
+        lunch: false,
+        dinner: false,
         guestBreakfast: 0,
         guestLunch: 0,
         guestDinner: 0
       };
-    }
+    });
 
     const newSheet: MemberMealSheet = {
       userId: newUserId,
@@ -1728,18 +1864,217 @@ export default function App() {
     }
   };
 
+  // Ensure all active/existing users have meal sheet date slots initialized for a target month
+  const ensureMealsForMonth = (monthStr: string) => {
+    const targetDates = getMonthDates(monthStr);
+    setMeals(prevMeals => {
+      const existingUserIds = new Set(prevMeals.map(m => m.userId));
+      const updated = prevMeals.map(sheet => {
+        let changed = false;
+        const nextMeals = { ...sheet.meals };
+        targetDates.forEach(dateStr => {
+          if (!nextMeals[dateStr]) {
+            changed = true;
+            nextMeals[dateStr] = {
+              breakfast: false,
+              lunch: false,
+              dinner: false,
+              guestBreakfast: 0,
+              guestLunch: 0,
+              guestDinner: 0
+            };
+          }
+        });
+        return changed ? { ...sheet, meals: nextMeals } : sheet;
+      });
+
+      users.forEach(u => {
+        if (!existingUserIds.has(u.id)) {
+          const freshMeals: MemberMealSheet['meals'] = {};
+          targetDates.forEach(dateStr => {
+            freshMeals[dateStr] = {
+              breakfast: false,
+              lunch: false,
+              dinner: false,
+              guestBreakfast: 0,
+              guestLunch: 0,
+              guestDinner: 0
+            };
+          });
+          updated.push({ userId: u.id, meals: freshMeals });
+        }
+      });
+
+      return updated;
+    });
+  };
+
+  // Start / Rollover to a new billing month (e.g., July 2026 -> August 2026)
+  const handleStartNewMonth = (
+    targetMonth?: string,
+    options: { autoCloseAndCarryForward?: boolean } = {}
+  ) => {
+    const nextMonth = targetMonth && /^\d{4}-\d{2}$/.test(targetMonth)
+      ? targetMonth
+      : getNextMonth(activeMonth);
+
+    let nextClosedMonths = [...(settings.closedMonths || [])];
+
+    // If rolling over from an unclosed month with autoCarryForward requested,
+    // calculate activeMonth balances, archive snapshot, and carry forward first.
+    if (options.autoCloseAndCarryForward && !settings.isMonthClosed) {
+      const monthDates = getMonthDates(activeMonth);
+      const isVac = (userId: string, date: string) =>
+        vacations.some(vp => vp.userId === userId && date >= vp.startDate && date <= vp.endDate);
+
+      const monthBazaar = bazaarEntries
+        .filter(b => b.status === 'Approved' && b.date.startsWith(activeMonth))
+        .reduce((s, b) => s + b.price, 0);
+      const monthOtherExp = expenses
+        .filter(e => e.date.startsWith(activeMonth))
+        .reduce((s, e) => s + e.amount, 0);
+      const monthTotalExp = monthBazaar + monthOtherExp;
+
+      const activeUsersList = users.filter(u => u.isActive);
+      const totalMonthMeals = activeUsersList.reduce((sum, u) => {
+        const sheet = meals.find(s => s.userId === u.id);
+        let uMeals = 0;
+        monthDates.forEach(d => {
+          if (isVac(u.id, d)) return;
+          const m = sheet?.meals[d];
+          if (!m) return;
+          uMeals += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1 : 0) + (m.dinner ? 1 : 0)
+            + ((m.guestBreakfast || 0) * 0.5) + (m.guestLunch || 0) + (m.guestDinner || 0);
+        });
+        return sum + uMeals;
+      }, 0);
+
+      const mealRate = totalMonthMeals > 0 ? monthTotalExp / totalMonthMeals : 0;
+      const monthApprovedDeposits = deposits
+        .filter(d => d.status === 'Approved' && d.date.startsWith(activeMonth))
+        .reduce((s, d) => s + d.amount, 0);
+
+      const memberSummaries: ClosedMonthRecord['memberSummaries'] = [];
+      const updatedUsers = users.map(u => {
+        const sheet = meals.find(s => s.userId === u.id);
+        let uMeals = 0;
+        monthDates.forEach(d => {
+          if (isVac(u.id, d)) return;
+          const m = sheet?.meals[d];
+          if (!m) return;
+          uMeals += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1 : 0) + (m.dinner ? 1 : 0)
+            + ((m.guestBreakfast || 0) * 0.5) + (m.guestLunch || 0) + (m.guestDinner || 0);
+        });
+        const billAmount = uMeals * mealRate;
+        const uDeposits = deposits
+          .filter(d => d.userId === u.id && d.status === 'Approved' && d.date.startsWith(activeMonth))
+          .reduce((s, d) => s + d.amount, 0);
+        const cf = u.carryForward || 0;
+        const closingBalance = Number((cf + uDeposits - billAmount).toFixed(2));
+
+        if (u.isActive) {
+          memberSummaries.push({
+            userId: u.id,
+            name: u.name,
+            totalMeals: uMeals,
+            billAmount,
+            deposits: uDeposits,
+            carryForward: cf,
+            closingBalance
+          });
+        }
+
+        return {
+          ...u,
+          carryForward: closingBalance
+        };
+      });
+
+      setUsers(updatedUsers);
+      if (isSupabaseConfigured) {
+        updatedUsers.forEach(u => {
+          if (isUUID(u.id)) {
+            supabase.from('users').update({ carry_forward: u.carryForward || 0 }).eq('id', u.id);
+          }
+        });
+      }
+
+      const snapshot: ClosedMonthRecord = {
+        month: activeMonth,
+        closedAt: new Date().toISOString(),
+        closedBy: currentUser.name,
+        mealRate,
+        totalMeals: totalMonthMeals,
+        totalExpenses: monthTotalExp,
+        totalDeposits: monthApprovedDeposits,
+        memberSummaries
+      };
+      nextClosedMonths = [
+        snapshot,
+        ...nextClosedMonths.filter(c => c.month !== activeMonth)
+      ];
+    }
+
+    ensureMealsForMonth(nextMonth);
+
+    const nextSettings: SystemSettings = {
+      ...settings,
+      activeMonth: nextMonth,
+      isMonthClosed: false,
+      lockOverride: false,
+      closedMonths: nextClosedMonths
+    };
+    setSettings(nextSettings);
+
+    const prevLabel = formatMonthLabel(activeMonth, settings.language);
+    const nextLabel = formatMonthLabel(nextMonth, settings.language);
+
+    logAction(
+      'Month Closing',
+      `Rolled over active billing month from ${prevLabel} to ${nextLabel}${options.autoCloseAndCarryForward ? ' (balances carried forward)' : ''}`,
+      `${activeMonth} (${settings.isMonthClosed ? 'Closed' : 'Open'})`,
+      `${nextMonth} (Open)`
+    );
+
+    users.filter(u => u.isActive).forEach(u => {
+      handleAddNotification(
+        'System',
+        settings.language === 'Bangla'
+          ? `নতুন মাস শুরু হয়েছে: ${nextLabel}`
+          : `New Billing Month Active: ${nextLabel}`,
+        settings.language === 'Bangla'
+          ? `হ্যালো ${u.name}, মেস সিস্টেম এখন ${nextLabel} মাসে আপডেট করা হয়েছে। আগের মাসের ব্যালেন্স ক্যারী ফরওয়ার্ড করা হয়েছে।`
+          : `Hi ${u.name}, the mess billing cycle has transitioned to ${nextLabel}. Previous balances have been carried forward.`,
+        u.id,
+        'Dashboard'
+      );
+    });
+
+    showToast(
+      settings.language === 'Bangla'
+        ? `নতুন মাস (${nextLabel}) সফলভাবে চালু হয়েছে!`
+        : `Successfully switched to ${nextLabel}!`,
+      'success'
+    );
+  };
+
   // Update Settings
   const handleUpdateSettings = (updatedSettings: SystemSettings) => {
     const wasClosed = settings.isMonthClosed;
+    const prevMonth = settings.activeMonth || getRealCurrentMonth();
+    const nextMonth = updatedSettings.activeMonth || prevMonth;
+    if (nextMonth !== prevMonth) {
+      ensureMealsForMonth(nextMonth);
+    }
     setSettings(updatedSettings);
 
-    const oldText = `Closed: ${settings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${settings.theme || 'Default'}, Lang: ${settings.language || 'English'}, LockTime: ${settings.mealLockTime}`;
-    const newText = `Closed: ${updatedSettings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${updatedSettings.theme || 'Default'}, Lang: ${updatedSettings.language || 'English'}, LockTime: ${updatedSettings.mealLockTime}`;
+    const oldText = `Month: ${prevMonth}, Closed: ${settings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${settings.theme || 'Default'}, Lang: ${settings.language || 'English'}, LockTime: ${settings.mealLockTime}`;
+    const newText = `Month: ${nextMonth}, Closed: ${updatedSettings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${updatedSettings.theme || 'Default'}, Lang: ${updatedSettings.language || 'English'}, LockTime: ${updatedSettings.mealLockTime}`;
 
     if (wasClosed !== updatedSettings.isMonthClosed) {
       logAction(
         'Month Closing', 
-        `Month state toggled to ${updatedSettings.isMonthClosed ? 'Closed & Locked' : 'Open & Editable'}`,
+        `Month state toggled to ${updatedSettings.isMonthClosed ? 'Closed & Locked' : 'Open & Editable'} (${formatMonthLabel(nextMonth)})`,
         oldText,
         newText
       );
@@ -1754,11 +2089,12 @@ export default function App() {
 
     // Trigger Month Closed notification if toggled to true
     if (!wasClosed && updatedSettings.isMonthClosed) {
+      const activeLabel = formatMonthLabel(nextMonth, updatedSettings.language);
       users.filter(u => u.isActive).forEach(u => {
         handleAddNotification(
           'MonthClosed',
-          `Mess Month Closed & Locked`,
-          `Hi ${u.name}, the current month (July 2026) has been officially closed and audited. Ledger edits are now locked.`,
+          `Mess Month Closed & Locked (${activeLabel})`,
+          `Hi ${u.name}, the billing month (${activeLabel}) has been officially closed and audited. Ledger edits are now locked.`,
           u.id,
           'Reports'
         );
@@ -2007,8 +2343,18 @@ export default function App() {
             settings={settings}
             currentUser={currentUser}
             role={currentPersona}
-            onUpdateUsers={setUsers}
+            onUpdateUsers={(updatedUsers) => {
+              setUsers(updatedUsers);
+              if (isSupabaseConfigured) {
+                updatedUsers.forEach(u => {
+                  if (isUUID(u.id)) {
+                    supabase.from('users').update({ carry_forward: u.carryForward || 0 }).eq('id', u.id);
+                  }
+                });
+              }
+            }}
             onUpdateSettings={handleUpdateSettings}
+            onStartNewMonth={handleStartNewMonth}
             onLogAction={logAction}
             vacationPeriods={vacations}
           />
@@ -2036,6 +2382,9 @@ export default function App() {
             role={currentPersona}
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
+            onStartNewMonth={handleStartNewMonth}
+            activeTheme={activeUserTheme}
+            onChangeUserTheme={handleUpdateUserTheme}
             darkMode={darkMode}
             setDarkMode={setDarkMode}
             onRestoreBackup={handleRestoreBackup}
@@ -2049,6 +2398,7 @@ export default function App() {
               activityLogs,
               vacations,
               assignedBazaarPersons,
+              settings,
             }}
           />
         );
@@ -2144,10 +2494,15 @@ export default function App() {
           <div className="flex items-center gap-4">
             
             {/* Month indicator */}
-            <div className="bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-750">
+            <button
+              type="button"
+              onClick={() => setCurrentTab(currentPersona === 'Admin' ? 'Settings' : 'Reports')}
+              title={currentPersona === 'Admin' ? 'Manage active month in Settings' : 'Active billing month'}
+              className="bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/70 dark:hover:bg-slate-800 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-750 transition cursor-pointer"
+            >
               <Calendar size={13} className="text-emerald-500" />
-              <span>July 2026</span>
-            </div>
+              <span>{formatMonthLabel(activeMonth, settings.language)}</span>
+            </button>
 
             {/* Month Closed lockdown alert banner */}
             {settings.isMonthClosed && (
@@ -2156,14 +2511,66 @@ export default function App() {
               </div>
             )}
 
-            {/* Quick Dark Mode icon toggle */}
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-              title={darkMode ? 'Switch to Light' : 'Switch to Dark'}
-            >
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
+            {/* Personal Theme Switcher (Available for ALL roles) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setThemeMenuOpen(!themeMenuOpen)}
+                className="p-2 rounded-xl text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer"
+                title={settings.language === 'Bangla' ? 'আপনার ব্যক্তিগত থিম পরিবর্তন করুন' : 'Change Your Personal Theme'}
+              >
+                <Palette size={18} />
+                <span className="hidden xl:inline text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                  {activeUserTheme}
+                </span>
+              </button>
+
+              {themeMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setThemeMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-2 z-50 space-y-1">
+                    <div className="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                        {settings.language === 'Bangla' ? 'আপনার পার্সোনাল থিম' : 'Personal Theme'}
+                      </span>
+                    </div>
+                    {([
+                      { id: 'Light', label: 'Light Slate', dot: 'bg-slate-200 border-slate-400' },
+                      { id: 'Dark', label: 'Charcoal Dark', dot: 'bg-slate-800 border-slate-600' },
+                      { id: 'Cosmic Slate', label: 'Cosmic Slate', dot: 'bg-indigo-600 border-indigo-400' },
+                      { id: 'Emerald Forest', label: 'Emerald Forest', dot: 'bg-emerald-600 border-emerald-400' },
+                      { id: 'Rose Quartz', label: 'Rose Quartz (Pink)', dot: 'bg-pink-600 border-pink-400' },
+                    ] as const).map(opt => {
+                      const selected = activeUserTheme === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            handleUpdateUserTheme(opt.id);
+                            setThemeMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            selected
+                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className={`w-3 h-3 rounded-full border ${opt.dot}`} />
+                            <span>{opt.label}</span>
+                          </span>
+                          {selected && <Check size={14} className="text-emerald-600 dark:text-emerald-400" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Notification Bell with Badge */}
             <button
@@ -2227,6 +2634,7 @@ export default function App() {
         isOpen={notificationCenterOpen}
         onClose={() => setNotificationCenterOpen(false)}
         currency={settings.currency}
+        activeMonth={activeMonth}
       />
 
     </div>
