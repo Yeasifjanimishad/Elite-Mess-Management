@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   ShieldCheck, 
   Lock, 
@@ -22,11 +22,6 @@ interface LoginScreenProps {
   onLanguageChange: (lang: 'English' | 'Bangla') => void;
   onDemoLogin?: (role?: 'Admin' | 'Meal Manager' | 'Member') => void;
   onLocalLogin?: (email: string, pass: string, fullName?: string, phone?: string) => void;
-  isPasswordRecovery?: boolean;
-  initialError?: string;
-  onClearInitialError?: () => void;
-  onPasswordResetSuccess?: () => void | Promise<void>;
-  onCancelPasswordRecovery?: () => void | Promise<void>;
 }
 
 const translations = {
@@ -54,13 +49,7 @@ const translations = {
     loading: "প্রক্রিয়াধীন...",
     dontHaveAccount: "অ্যাকাউন্ট নেই? এখানে নিবন্ধন করুন",
     alreadyHaveAccount: "ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন",
-    adminInitInfo: "নিবন্ধন করার পর আপনার আইডিকে অ্যাডমিন করতে এই ট্যাবটি ব্যবহার করুন।",
-    newPasswordTitle: "নতুন পাসওয়ার্ড সেট করুন",
-    newPasswordSubtitle: "আপনার অ্যাকাউন্টের জন্য একটি নতুন ও শক্তিশালী পাসওয়ার্ড লিখুন।",
-    newPasswordLabel: "নতুন পাসওয়ার্ড",
-    confirmPasswordLabel: "পাসওয়ার্ড নিশ্চিত করুন",
-    updatePasswordBtn: "পাসওয়ার্ড আপডেট করুন",
-    successPasswordUpdated: "পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে! এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।"
+    adminInitInfo: "নিবন্ধন করার পর আপনার আইডিকে অ্যাডমিন করতে এই ট্যাবটি ব্যবহার করুন।"
   },
   English: {
     title: "Elite Mess Management",
@@ -86,34 +75,16 @@ const translations = {
     loading: "Loading...",
     dontHaveAccount: "Don't have an account? Register here",
     alreadyHaveAccount: "Already have an account? Sign in",
-    adminInitInfo: "Use this tab to promote your newly registered account to Admin.",
-    newPasswordTitle: "Set New Password",
-    newPasswordSubtitle: "Enter a strong new password for your account.",
-    newPasswordLabel: "New Password",
-    confirmPasswordLabel: "Confirm New Password",
-    updatePasswordBtn: "Update Password",
-    successPasswordUpdated: "Password updated successfully! You can now sign in with your new password."
+    adminInitInfo: "Use this tab to promote your newly registered account to Admin."
   }
 };
 
-export default function LoginScreen({
-  language,
-  onLanguageChange,
-  onDemoLogin,
-  onLocalLogin,
-  isPasswordRecovery = false,
-  initialError = '',
-  onClearInitialError,
-  onPasswordResetSuccess,
-  onCancelPasswordRecovery,
-}: LoginScreenProps) {
+export default function LoginScreen({ language, onLanguageChange, onDemoLogin, onLocalLogin }: LoginScreenProps) {
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'forgot' | 'adminInit'>('login');
   
   // Form Inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -125,14 +96,6 @@ export default function LoginScreen({
   const [success, setSuccess] = useState('');
 
   const t = translations[language];
-
-  useEffect(() => {
-    if (initialError) {
-      setError(initialError);
-      setActiveTab('forgot');
-      onClearInitialError?.();
-    }
-  }, [initialError, onClearInitialError]);
 
   // Helper to parse any error format robustly
   const parseErrorMessage = (err: any): string => {
@@ -329,63 +292,19 @@ export default function LoginScreen({
           return;
         }
 
-        setError(parseErrorMessage(resetError));
-        return;
+        const errMsg = resetError.message || parseErrorMessage(resetError);
+        if (!errMsg.toLowerCase().includes('fetch')) {
+          setError(parseErrorMessage(resetError));
+          setLoading(false);
+          return;
+        }
       }
 
       setSuccess(
         language === 'Bangla'
-          ? 'লোকাল মোডে পাসওয়ার্ড রিসেট সম্পন্ন হয়েছে। নতুন তথ্য ব্যবহার করে সিস্টেমে প্রবেশ করুন।'
-          : 'Password reset completed in Local Mode. You can now sign in.'
+          ? 'পাসওয়ার্ড রিসেট সম্পন্ন হয়েছে। নতুন তথ্য ব্যবহার করে সিস্টেমে প্রবেশ করুন।'
+          : 'Password reset completed. You can now sign in.'
       );
-    } catch (err: any) {
-      setError(parseErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Update New Password Handler (after user clicks email recovery link)
-  const handleUpdateNewPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (newPassword.length < 6) {
-      setError(
-        language === 'Bangla'
-          ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।'
-          : 'Password must be at least 6 characters long.'
-      );
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError(
-        language === 'Bangla'
-          ? 'দুইটি পাসওয়ার্ড মিলছে না। অনুগ্রহ করে আবার চেক করুন।'
-          : 'Passwords do not match. Please re-enter carefully.'
-      );
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
-      if (updateError) {
-        setError(parseErrorMessage(updateError));
-        return;
-      }
-
-      setNewPassword('');
-      setConfirmPassword('');
-      setPassword('');
-      setActiveTab('login');
-      setSuccess(t.successPasswordUpdated);
-      await onPasswordResetSuccess?.();
     } catch (err: any) {
       setError(parseErrorMessage(err));
     } finally {
@@ -485,54 +404,52 @@ export default function LoginScreen({
         </div>
 
         {/* Interactive Tab switchers */}
-        {!isPasswordRecovery && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 gap-1">
-            <button
-              type="button"
-              onClick={() => handleTabChange('login')}
-              className={`text-center py-2 text-xs font-extrabold rounded-xl transition-all duration-150 cursor-pointer ${
-                activeTab === 'login' 
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              {t.loginTab}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('register')}
-              className={`text-center py-2 text-xs font-extrabold rounded-xl transition-all duration-150 cursor-pointer ${
-                activeTab === 'register' 
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              {t.registerTab}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('forgot')}
-              className={`text-center py-2 text-xs font-extrabold rounded-xl transition-all duration-150 cursor-pointer ${
-                activeTab === 'forgot' 
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              {t.forgotPasswordTab}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('adminInit')}
-              className={`text-center py-2 text-xs font-extrabold rounded-xl transition-all duration-150 cursor-pointer ${
-                activeTab === 'adminInit' 
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              {language === 'Bangla' ? 'অ্যাডমিন সেটআপ' : 'Admin Setup'}
-            </button>
-          </div>
-        )}
+        <div className="grid grid-cols-2 sm:grid-cols-4 bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 gap-1">
+          <button
+            type="button"
+            onClick={() => handleTabChange('login')}
+            className={`text-center py-2 text-xs font-extrabold rounded-xl transition-all duration-150 cursor-pointer ${
+              activeTab === 'login' 
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            {t.loginTab}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('register')}
+            className={`text-center py-2 text-xs font-extrabold rounded-xl transition-all duration-150 cursor-pointer ${
+              activeTab === 'register' 
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            {t.registerTab}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('forgot')}
+            className={`text-center py-2 text-xs font-extrabold rounded-xl transition-all duration-150 cursor-pointer ${
+              activeTab === 'forgot' 
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            {t.forgotPasswordTab}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange('adminInit')}
+            className={`text-center py-2 text-xs font-extrabold rounded-xl transition-all duration-150 cursor-pointer ${
+              activeTab === 'adminInit' 
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            {language === 'Bangla' ? 'অ্যাডমিন সেটআপ' : 'Admin Setup'}
+          </button>
+        </div>
 
         {/* Unconfigured Supabase Banner */}
         {!isSupabaseConfigured && (
@@ -598,90 +515,8 @@ export default function LoginScreen({
           </div>
         )}
 
-        {/* ==================== PASSWORD RECOVERY FORM (SET NEW PASSWORD) ==================== */}
-        {isPasswordRecovery && (
-          <form onSubmit={handleUpdateNewPassword} className="space-y-5">
-            <div className="bg-emerald-500/5 dark:bg-emerald-500/10 border-2 border-emerald-500/20 rounded-2xl p-4 space-y-1">
-              <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <KeyRound size={18} className="text-emerald-600 dark:text-emerald-400" />
-                {t.newPasswordTitle}
-              </h2>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                {t.newPasswordSubtitle}
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                {t.newPasswordLabel}
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={6}
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full pl-11 pr-11 py-3 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                {t.confirmPasswordLabel}
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={6}
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 text-sm bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 text-sm font-black uppercase tracking-wider rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/25 transition-all cursor-pointer flex items-center justify-center gap-2"
-            >
-              {loading ? t.loading : t.updatePasswordBtn}
-              {!loading && <ArrowRight size={16} />}
-            </button>
-
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setError('');
-                  setNewPassword('');
-                  setConfirmPassword('');
-                  onCancelPasswordRecovery?.();
-                }}
-                className="text-xs sm:text-sm font-extrabold text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 cursor-pointer"
-              >
-                {language === 'Bangla' ? 'বাতিল করে লগইনে ফিরে যান' : 'Cancel & Back to Login'}
-              </button>
-            </div>
-          </form>
-        )}
-
         {/* ==================== LOGIN FORM ==================== */}
-        {!isPasswordRecovery && activeTab === 'login' && (
+        {activeTab === 'login' && (
           <form onSubmit={handleSignIn} className="space-y-5">
             <div className="space-y-1.5">
               <label className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
@@ -770,7 +605,7 @@ export default function LoginScreen({
         )}
 
         {/* ==================== REGISTER FORM ==================== */}
-        {!isPasswordRecovery && activeTab === 'register' && (
+        {activeTab === 'register' && (
           <form onSubmit={handleSignUp} className="space-y-5">
             <div className="space-y-1.5">
               <label className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
@@ -880,7 +715,7 @@ export default function LoginScreen({
         )}
 
         {/* ==================== FORGOT PASSWORD FORM ==================== */}
-        {!isPasswordRecovery && activeTab === 'forgot' && (
+        {activeTab === 'forgot' && (
           <form onSubmit={handleForgotPassword} className="space-y-5">
             <div className="space-y-1.5">
               <label className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
@@ -921,7 +756,7 @@ export default function LoginScreen({
         )}
 
         {/* ==================== ONE-TIME FIRST ADMIN ACTIVATION FORM ==================== */}
-        {!isPasswordRecovery && activeTab === 'adminInit' && (
+        {activeTab === 'adminInit' && (
           <form onSubmit={handleAdminInit} className="space-y-5">
             <div className="bg-amber-500/5 dark:bg-amber-500/10 border-2 border-amber-500/20 rounded-2xl p-5 text-sm leading-relaxed space-y-3">
               <div className="flex gap-3 items-start">

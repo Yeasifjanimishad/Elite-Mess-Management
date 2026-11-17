@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Settings, 
   Lock, 
@@ -19,20 +19,14 @@ import {
   Megaphone,
   Users,
   CreditCard,
-  Sliders,
-  Calendar,
-  ArrowRight
+  Sliders
 } from 'lucide-react';
 import { SystemSettings, UserRole } from '../types';
-import { formatMonthLabel, getNextMonth, getRealCurrentMonth } from '../utils/dateUtils';
 
 interface SettingsTabProps {
   role: UserRole;
   settings: SystemSettings;
   onUpdateSettings: (settings: SystemSettings) => void;
-  onStartNewMonth?: (targetMonth?: string, options?: { autoCloseAndCarryForward?: boolean }) => void;
-  activeTheme?: SystemSettings['theme'];
-  onChangeUserTheme?: (theme: NonNullable<SystemSettings['theme']>) => void;
   darkMode: boolean;
   setDarkMode: (dark: boolean) => void;
   onRestoreBackup?: (backupData: any) => void;
@@ -46,7 +40,6 @@ interface SettingsTabProps {
     activityLogs: any[];
     vacations: any[];
     assignedBazaarPersons: string[];
-    settings?: SystemSettings;
   };
 }
 
@@ -102,9 +95,6 @@ export default function SettingsTab({
   role,
   settings,
   onUpdateSettings,
-  onStartNewMonth,
-  activeTheme,
-  onChangeUserTheme,
   darkMode,
   setDarkMode,
   onRestoreBackup,
@@ -113,15 +103,10 @@ export default function SettingsTab({
 
   const isAdmin = role === 'Admin';
   const isBangla = settings.language === 'Bangla';
-  const activeMonth = settings.activeMonth || getRealCurrentMonth();
-  const nextMonth = getNextMonth(activeMonth);
-  const activeMonthLabel = formatMonthLabel(activeMonth, settings.language);
-  const nextMonthLabel = formatMonthLabel(nextMonth, settings.language);
 
   // Form states
   const [formData, setFormData] = useState<SystemSettings>({
     ...settings,
-    activeMonth,
     theme: settings.theme || 'Light',
     mgrCanApproveBazaar: settings.mgrCanApproveBazaar ?? true,
     mgrCanAddDeposit: settings.mgrCanAddDeposit ?? true,
@@ -130,25 +115,8 @@ export default function SettingsTab({
     mgrCanPublishNotice: settings.mgrCanPublishNotice ?? true,
   });
 
-  const [selectedTargetMonth, setSelectedTargetMonth] = useState<string>(activeMonth);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const resolvedMonth = settings.activeMonth || getRealCurrentMonth();
-    setSelectedTargetMonth(resolvedMonth);
-    setFormData(prev => ({
-      ...prev,
-      ...settings,
-      activeMonth: resolvedMonth,
-      theme: settings.theme || 'Light',
-      mgrCanApproveBazaar: settings.mgrCanApproveBazaar ?? true,
-      mgrCanAddDeposit: settings.mgrCanAddDeposit ?? true,
-      mgrCanAddExpense: settings.mgrCanAddExpense ?? true,
-      mgrCanManageUsers: settings.mgrCanManageUsers ?? false,
-      mgrCanPublishNotice: settings.mgrCanPublishNotice ?? true,
-    }));
-  }, [settings]);
 
   const handleChange = (key: keyof SystemSettings, val: any) => {
     setFormData(prev => ({
@@ -327,8 +295,8 @@ export default function SettingsTab({
           <ShieldAlert size={16} className="shrink-0" />
           <span>
             {isBangla 
-              ? 'পার্সোনাল থিম আনলকড: আপনি নিচে থেকে নিজের জন্য পছন্দের থিম বেছে নিতে পারবেন। তবে মেসের গ্লোবাল সিস্টেম সেটিংস ও পারমিশন শুধুমাত্র অ্যাডমিন পরিবর্তন করতে পারেন।'
-              : 'Personal Theme Unlocked: You can freely change your own visual theme below anytime. Global mess configuration and permissions remain Admin-only.'}
+              ? 'ভিউ-অনলি মোড: আপনি বর্তমানে সদস্য বা ম্যানেজার হিসাবে লগইন করেছেন। শুধুমাত্র অ্যাডমিন সিস্টেম ভেরিয়েবল এবং অনুমতি পরিবর্তন করতে পারেন।'
+              : 'Read-Only Mode: You are logged in as a Manager/Member. System variables, themes, and manager permissions can only be altered by an Admin.'}
           </span>
         </div>
       )}
@@ -457,51 +425,32 @@ export default function SettingsTab({
                 </label>
               </div>
 
-              {/* VISUAL THEME SELECTION PANEL (UNLOCKED FOR ALL USERS) */}
+              {/* VISUAL THEME SELECTION PANEL */}
               <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                      {isBangla ? 'আপনার ব্যক্তিগত থিম প্রিসেট' : 'Your Personal Theme Preset'}
-                    </label>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                      {isBangla 
-                        ? 'সব সদস্য এবং ম্যানেজার নিজের পছন্দমতো থিম বেছে নিতে পারবেন—ক্লিক করলেই সাথে সাথে আপনার প্রোফাইলে সেভ হবে।'
-                        : 'Every member, manager, and admin can customize their own visual theme here—clicking any theme applies immediately.'}
-                    </p>
-                  </div>
-                  <span className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-extrabold">
-                    {isBangla ? 'সবার জন্য উন্মুক্ত' : 'Everyone Can Customize'}
-                  </span>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    {isBangla ? 'মেস থিম প্রিসেট' : 'System Skin / Theme Preset'}
+                  </label>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                    {isBangla 
+                      ? 'অ্যাডমিন দ্বারা নির্বাচিত থিমটি সমস্ত মেম্বারদের ড্যাশবোর্ডে প্রতিফলিত হবে।'
+                      : 'The default active visual background skin for the entire ecosystem.'}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {themeOptions.map((opt) => {
-                    const currentSelectedTheme = activeTheme || formData.theme || 'Light';
-                    const isSelected = currentSelectedTheme === opt.id;
+                    const isSelected = formData.theme === opt.id;
                     return (
                       <div
                         key={opt.id}
-                        onClick={() => {
-                          const chosen = opt.id as NonNullable<SystemSettings['theme']>;
-                          if (onChangeUserTheme) {
-                            onChangeUserTheme(chosen);
-                          }
-                          if (isAdmin) {
-                            handleChange('theme', chosen);
-                          }
-                          setMessage({
-                            text: isBangla
-                              ? `আপনার থিম "${opt.name}"-এ পরিবর্তন করা হয়েছে!`
-                              : `Your personal theme switched to "${opt.name}"!`,
-                            type: 'success'
-                          });
-                          setTimeout(() => setMessage(null), 2500);
-                        }}
-                        className={`border rounded-xl p-3.5 flex flex-col justify-between transition h-28 relative cursor-pointer ${opt.cardStyles} ${
+                        onClick={() => isAdmin && handleChange('theme', opt.id)}
+                        className={`border rounded-xl p-3.5 flex flex-col justify-between transition h-28 relative ${
+                          isAdmin ? 'cursor-pointer' : 'cursor-not-allowed'
+                        } ${opt.cardStyles} ${
                           isSelected 
-                            ? 'border-emerald-500 ring-2 ring-emerald-500/20' 
-                            : 'border-slate-200 dark:border-slate-800 hover:border-emerald-400/60'
+                            ? 'border-emerald-500 ring-2 ring-emerald-500/10' 
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-350 dark:hover:border-slate-750'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -718,98 +667,9 @@ export default function SettingsTab({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: ACTIVE MONTH ROLLOVER, CLOSING & BACKUPS */}
+        {/* RIGHT COLUMN: MONTH CLOSING & HARDWARE BACKUPS */}
         <div className="space-y-6">
-
-          {/* CARD 0: ACTIVE BILLING MONTH & ROLLOVER */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2 text-sm">
-                <Calendar size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                {isBangla ? 'চলতি বিলিং মাস ও রোলওভার' : 'Active Billing Month'}
-              </h4>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                settings.isMonthClosed
-                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                  : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-              }`}>
-                {settings.isMonthClosed ? (isBangla ? 'ক্লোজড' : 'Closed') : (isBangla ? 'চালু (Open)' : 'Open')}
-              </span>
-            </div>
-
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                {isBangla ? 'বর্তমান সক্রিয় মাস:' : 'Current Cycle:'}
-              </span>
-              <span className="text-sm font-black text-slate-850 dark:text-white">
-                {activeMonthLabel}
-              </span>
-            </div>
-
-            {isAdmin && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                    {isBangla ? 'নির্দিষ্ট মাস সেট করুন (যেমন: আগস্ট)' : 'Switch to Specific Month'}
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="month"
-                      value={selectedTargetMonth}
-                      onChange={(e) => setSelectedTargetMonth(e.target.value)}
-                      className="flex-1 text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-850 dark:text-white font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      disabled={!selectedTargetMonth || selectedTargetMonth === activeMonth}
-                      onClick={() => {
-                        if (!selectedTargetMonth || selectedTargetMonth === activeMonth) return;
-                        if (onStartNewMonth) {
-                          onStartNewMonth(selectedTargetMonth, { autoCloseAndCarryForward: !settings.isMonthClosed });
-                        } else {
-                          const updated = { ...formData, activeMonth: selectedTargetMonth, isMonthClosed: false };
-                          setFormData(updated);
-                          onUpdateSettings(updated);
-                        }
-                      }}
-                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition cursor-pointer disabled:cursor-not-allowed"
-                    >
-                      {isBangla ? 'সেট করুন' : 'Apply'}
-                    </button>
-                  </div>
-                </div>
-
-                {onStartNewMonth && (
-                  <button
-                    type="button"
-                    onClick={() => onStartNewMonth(nextMonth, { autoCloseAndCarryForward: !settings.isMonthClosed })}
-                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-500/15 flex items-center justify-center gap-2 transition cursor-pointer"
-                  >
-                    <ArrowRight size={14} />
-                    <span>
-                      {settings.isMonthClosed
-                        ? (isBangla ? `পরবর্তী মাস শুরু করুন (${nextMonthLabel})` : `Start Next Month (${nextMonthLabel})`)
-                        : (isBangla ? `চলতি মাস ক্লোজ ও ${nextMonthLabel} শুরু` : `Close & Start ${nextMonthLabel}`)}
-                    </span>
-                  </button>
-                )}
-
-                <p className="text-[10px] text-slate-400 leading-relaxed">
-                  {isBangla
-                    ? 'রোলওভার করলে চলতি মাসের বকেয়া/উদ্বৃত্ত ব্যালেন্স স্বয়ংক্রিয়ভাবে ক্যারী ফরওয়ার্ড হয়ে নতুন মাসের মিল শিট তৈরি হবে।'
-                    : 'Rolling over calculates ending member balances into Carry Forward, archives the closing snapshot, and initializes a fresh month calendar.'}
-                </p>
-
-                {settings.closedMonths && settings.closedMonths.length > 0 && (
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-                    <span>{isBangla ? 'আর্কাইভকৃত ক্লোজড মাস:' : 'Archived Closed Months:'}</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">{settings.closedMonths.length}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
+          
           {/* CARD 1: MONTH CLOSING PROCEDURES */}
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
             <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2 text-sm">
@@ -834,11 +694,11 @@ export default function SettingsTab({
                 >
                   {settings.isMonthClosed ? (
                     <>
-                      <Unlock size={14} /> {isBangla ? `${activeMonthLabel} পুনরায় চালু করুন` : `Unlock & Reopen ${activeMonthLabel}`}
+                      <Unlock size={14} /> {isBangla ? 'মাস পুনরায় চালু করুন' : 'Unlock & Reopen Month'}
                     </>
                   ) : (
                     <>
-                      <Lock size={14} /> {isBangla ? `${activeMonthLabel} বন্ধ ও লক করুন` : `Lock & Close ${activeMonthLabel}`}
+                      <Lock size={14} /> {isBangla ? 'মাস বন্ধ ও লক করুন' : 'Lock & Close July 2026'}
                     </>
                   )}
                 </button>

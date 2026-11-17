@@ -17,7 +17,6 @@ import {
   Info
 } from 'lucide-react';
 import { ActivityLog } from '../types';
-import { getRealTodayStr } from '../utils/dateUtils';
 
 interface AuditLogTabProps {
   activities: ActivityLog[];
@@ -223,7 +222,7 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
           
           {filteredActivities.map((log) => {
             const isExpanded = expandedLogId === log.id;
-            const fallbackDateStr = log.timestamp ? log.timestamp.split('T')[0] : getRealTodayStr();
+            const fallbackDateStr = log.timestamp ? log.timestamp.split('T')[0] : '2026-07-18';
             const fallbackTimeStr = log.timestamp ? log.timestamp.split('T')[1]?.slice(0, 8) || '00:00:00' : '00:00:00';
             
             const displayDate = log.date || fallbackDateStr;

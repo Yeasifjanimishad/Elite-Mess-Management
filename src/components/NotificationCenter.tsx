@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Bell, 
   Check, 
@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { AppNotification, User, SystemSettings, MemberMealSheet } from '../types';
 import { useFeedback } from './FeedbackContext';
-import { getRealCurrentMonth, getEffectiveDatesForMonth } from '../utils/dateUtils';
 
 interface NotificationCenterProps {
   notifications: AppNotification[];
@@ -37,7 +36,6 @@ interface NotificationCenterProps {
   isOpen: boolean;
   onClose: () => void;
   currency: string;
-  activeMonth?: string;
 }
 
 export default function NotificationCenter({
@@ -55,25 +53,17 @@ export default function NotificationCenter({
   onNavigateTab,
   isOpen,
   onClose,
-  currency,
-  activeMonth
+  currency
 }: NotificationCenterProps) {
   const { showToast } = useFeedback();
   const [filter, setFilter] = useState<'All' | 'Unread'>('All');
   const [activeTab, setActiveTab] = useState<'list' | 'trigger'>('list');
 
-  const resolvedMonth = activeMonth || getRealCurrentMonth();
-  const { tomorrow } = getEffectiveDatesForMonth(resolvedMonth);
-
   // Triggering form states
   const [mealTarget, setMealTarget] = useState<string>('all');
-  const [bazaarDate, setBazaarDate] = useState<string>(tomorrow);
+  const [bazaarDate, setBazaarDate] = useState<string>('2026-07-19');
   const [depositTarget, setDepositTarget] = useState<string>('all');
   const [customDepositNote, setCustomDepositNote] = useState<string>('');
-
-  useEffect(() => {
-    setBazaarDate(tomorrow);
-  }, [tomorrow]);
 
   // Filter notifications relevant to current user
   // (Broadcasts, or specifically targeted to this user)

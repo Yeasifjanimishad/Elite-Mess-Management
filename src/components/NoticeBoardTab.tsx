@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { Notice, User as UserType, SystemSettings } from '../types';
 import { useFeedback } from './FeedbackContext';
-import { getRealCurrentMonth, getEffectiveDatesForMonth } from '../utils/dateUtils';
 
 interface NoticeBoardTabProps {
   currentUser: UserType;
@@ -44,8 +43,7 @@ export default function NoticeBoardTab({
 
   const isManagerOrAdmin = role === 'Admin' || (role === 'Meal Manager' && settings.mgrCanPublishNotice !== false);
   const isBangla = settings.language === 'Bangla';
-  const activeMonth = settings.activeMonth || getRealCurrentMonth();
-  const { today } = getEffectiveDatesForMonth(activeMonth);
+  const today = '2026-07-18'; // current system date
 
   // State
   const [searchQuery, setSearchQuery] = useState('');

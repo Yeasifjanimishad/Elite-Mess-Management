@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   FilePieChart, 
   Printer, 
@@ -22,17 +22,8 @@ import {
   Activity,
   Award
 } from 'lucide-react';
-import { User, MemberMealSheet, Deposit, BazaarEntry, Expense, SystemSettings, MealStatus, VacationPeriod, ClosedMonthRecord } from '../types';
+import { User, MemberMealSheet, Deposit, BazaarEntry, Expense, SystemSettings, MealStatus, VacationPeriod } from '../types';
 import { useFeedback } from './FeedbackContext';
-import {
-  getRealCurrentMonth,
-  getMonthDates,
-  getDaysInMonth,
-  getNextMonth,
-  formatMonthLabel,
-  getMonthPickerOptions,
-  getWeekRangesForMonth
-} from '../utils/dateUtils';
 
 interface ReportsTabProps {
   allUsers: User[];
@@ -45,7 +36,6 @@ interface ReportsTabProps {
   role: 'Admin' | 'Meal Manager' | 'Member';
   onUpdateUsers: (updatedUsers: User[]) => void;
   onUpdateSettings: (updatedSettings: SystemSettings) => void;
-  onStartNewMonth?: (targetMonth?: string, options?: { autoCloseAndCarryForward?: boolean }) => void;
   onLogAction: (actionName: string, details: string) => void;
   vacationPeriods?: VacationPeriod[];
 }
@@ -63,50 +53,21 @@ export default function ReportsTab({
   role,
   onUpdateUsers,
   onUpdateSettings,
-  onStartNewMonth,
   onLogAction,
   vacationPeriods = []
 }: ReportsTabProps) {
 
-  const activeMonth = settings.activeMonth || getRealCurrentMonth();
-  const [selectedMonth, setSelectedMonth] = useState(activeMonth);
   const [activeTab, setActiveTab] = useState<ReportSubTab>('Monthly');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string>(allUsers.find(u => u.isActive)?.id || '');
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingSuccess, setIsClosingSuccess] = useState(false);
 
-  useEffect(() => {
-    setSelectedMonth(activeMonth);
-  }, [activeMonth]);
-
   const isManagerOrAdmin = role === 'Admin' || role === 'Meal Manager';
   const isBangla = settings.language === 'Bangla';
   const currency = settings.currency;
 
   const { showToast } = useFeedback();
-
-  const monthDates = getMonthDates(selectedMonth);
-  const daysInMonth = getDaysInMonth(selectedMonth);
-  const nextMonth = getNextMonth(activeMonth);
-  const selectedMonthLabel = formatMonthLabel(selectedMonth, settings.language);
-  const activeMonthLabel = formatMonthLabel(activeMonth, settings.language);
-  const nextMonthLabel = formatMonthLabel(nextMonth, settings.language);
-
-  const monthOptions = getMonthPickerOptions(activeMonth, [
-    selectedMonth,
-    ...bazaarEntries.map(b => b.date.slice(0, 7)),
-    ...expenses.map(e => e.date.slice(0, 7)),
-    ...deposits.map(d => d.date.slice(0, 7)),
-    ...(settings.closedMonths?.map(c => c.month) || [])
-  ]);
-
-  const monthBazaarEntries = bazaarEntries.filter(entry => entry.date.startsWith(selectedMonth));
-  const monthExpenses = expenses.filter(exp => exp.date.startsWith(selectedMonth));
-  const monthDeposits = deposits.filter(d => d.date.startsWith(selectedMonth));
-  const archivedSnapshot = selectedMonth !== activeMonth
-    ? settings.closedMonths?.find(c => c.month === selectedMonth)
-    : undefined;
 
   // Helper to check vacation
   const isVacation = (userId: string, date: string): boolean => {
@@ -118,34 +79,34 @@ export default function ReportsTab({
   // -------------------------------------------------------------------
   
   // Total Approved Bazaar Cost
-  const totalBazaarCost = monthBazaarEntries
+  const totalBazaarCost = bazaarEntries
     .filter(entry => entry.status === 'Approved')
     .reduce((sum, entry) => sum + entry.price, 0);
 
   // Total Utility & Overhead Expenses
-  const totalOtherExpense = monthExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const totalOtherExpense = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const totalExpenses = totalBazaarCost + totalOtherExpense;
 
   // Total Meals consumed across the mess (Breakfast = 0.5, Lunch = 1.0, Dinner = 1.0)
-  const rawTotalMeals = allUsers.filter(u => u.isActive).reduce((sum, user) => {
+  const totalMealsInMonth = allUsers.filter(u => u.isActive).reduce((sum, user) => {
     let userSum = 0;
     const userSheet = meals.find(s => s.userId === user.id);
-    monthDates.forEach(dateStr => {
-      if (isVacation(user.id, dateStr)) return; // skip vacation days
+    for (let day = 1; day <= 31; day++) {
+      const dateStr = `2026-07-${day < 10 ? '0' + day : day}`;
+      if (isVacation(user.id, dateStr)) continue; // skip vacation days
       const m = userSheet?.meals[dateStr] || {
-        breakfast: false, lunch: false, dinner: false,
+        breakfast: true, lunch: true, dinner: true,
         guestBreakfast: 0, guestLunch: 0, guestDinner: 0
       };
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
       const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
       userSum += own + guest;
-    });
+    }
     return sum + userSum;
-  }, 0);
-  const totalMealsInMonth = rawTotalMeals;
+  }, 0) || 1;
 
   // Meal Rate = Total Expenses / Total Meals
-  const currentMealRate = totalMealsInMonth > 0 ? totalExpenses / totalMealsInMonth : 0;
+  const currentMealRate = totalExpenses / totalMealsInMonth;
 
   // Helper to generate financial row for each user
   const getUserFinancialRow = (user: User) => {
@@ -157,10 +118,11 @@ export default function ReportsTab({
     let guestLunchCount = 0;
     let guestDinnerCount = 0;
 
-    monthDates.forEach(dateStr => {
-      if (isVacation(user.id, dateStr)) return;
+    for (let day = 1; day <= 31; day++) {
+      const dateStr = `2026-07-${day < 10 ? '0' + day : day}`;
+      if (isVacation(user.id, dateStr)) continue;
       const m = userMealSheet?.meals[dateStr] || {
-        breakfast: false, lunch: false, dinner: false,
+        breakfast: true, lunch: true, dinner: true,
         guestBreakfast: 0, guestLunch: 0, guestDinner: 0
       };
       ownMealsCount += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
@@ -169,19 +131,18 @@ export default function ReportsTab({
       guestLunchCount += m.guestLunch || 0;
       guestDinnerCount += m.guestDinner || 0;
       guestMealsCount += ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
-    });
+    }
 
     const totalUserMeals = ownMealsCount + guestMealsCount;
     // User Bill = User Meals x Meal Rate
     const billAmount = totalUserMeals * currentMealRate;
     
     // Total approved deposits
-    const totalUserDeposits = monthDeposits
+    const totalUserDeposits = deposits
       .filter(d => d.userId === user.id && d.status === 'Approved')
       .reduce((sum, d) => sum + d.amount, 0);
 
-    const archivedCarry = archivedSnapshot?.memberSummaries?.find(m => m.userId === user.id)?.carryForward;
-    const carryForward = archivedCarry !== undefined ? archivedCarry : (user.carryForward || 0);
+    const carryForward = user.carryForward || 0;
     // Balance = Carry Forward + Deposit - Bill
     const balance = carryForward + totalUserDeposits - billAmount;
 
@@ -211,7 +172,10 @@ export default function ReportsTab({
   // -------------------------------------------------------------------
   // 1. DAILY REPORT ENGINE
   // -------------------------------------------------------------------
-  const dailyReports = monthDates.map((dateStr) => {
+  const dailyReports = Array.from({ length: 31 }, (_, i) => {
+    const dayNum = i + 1;
+    const dateStr = `2026-07-${dayNum < 10 ? '0' + dayNum : dayNum}`;
+    
     let totalDailyMeals = 0;
     let activeDiners = 0;
 
@@ -226,11 +190,11 @@ export default function ReportsTab({
       }
     });
 
-    const dailyBazaar = monthBazaarEntries
+    const dailyBazaar = bazaarEntries
       .filter(entry => entry.status === 'Approved' && entry.date === dateStr)
       .reduce((sum, entry) => sum + entry.price, 0);
 
-    const dailyOverhead = monthExpenses
+    const dailyOverhead = expenses
       .filter(exp => exp.date === dateStr)
       .reduce((sum, exp) => sum + exp.amount, 0);
 
@@ -252,7 +216,13 @@ export default function ReportsTab({
   // 2. WEEKLY REPORT ENGINE
   // -------------------------------------------------------------------
   const getWeeklyReports = () => {
-    const weeksDef = getWeekRangesForMonth(selectedMonth, isBangla);
+    const weeksDef = [
+      { id: 1, name: isBangla ? 'সপ্তাহ ১ (০১-০৭ জুলাই)' : 'Week 1 (July 01 - 07)', start: 1, end: 7 },
+      { id: 2, name: isBangla ? 'সপ্তাহ ২ (০৮-১৪ জুলাই)' : 'Week 2 (July 08 - 14)', start: 8, end: 14 },
+      { id: 3, name: isBangla ? 'সপ্তাহ ৩ (১৫-২১ জুলাই)' : 'Week 3 (July 15 - 21)', start: 15, end: 21 },
+      { id: 4, name: isBangla ? 'সপ্তাহ ৪ (২২-২৮ জুলাই)' : 'Week 4 (July 22 - 28)', start: 22, end: 28 },
+      { id: 5, name: isBangla ? 'সপ্তাহ ৫ (২৯-৩১ জুলাই)' : 'Week 5 (July 29 - 31)', start: 29, end: 31 }
+    ];
 
     return weeksDef.map(w => {
       let mealsCount = 0;
@@ -296,7 +266,9 @@ export default function ReportsTab({
     const sheet = meals.find(s => s.userId === selectedUserRow.userId);
     if (!sheet) return [];
 
-    return monthDates.map((dateStr) => {
+    return Array.from({ length: 31 }, (_, i) => {
+      const dayNum = i + 1;
+      const dateStr = `2026-07-${dayNum < 10 ? '0' + dayNum : dayNum}`;
       const mStatus = sheet.meals[dateStr] || {
         breakfast: false, lunch: false, dinner: false,
         guestBreakfast: 0, guestLunch: 0, guestDinner: 0
@@ -328,53 +300,25 @@ export default function ReportsTab({
   const handleCloseMonth = () => {
     // 1. Calculate and update carryForwards to final remaining balances
     const updatedUsersList = allUsers.map(user => {
+      // Find row
       const row = getUserFinancialRow(user);
       return {
         ...user,
-        carryForward: Number(row.balance.toFixed(2))
+        carryForward: Number(row.balance.toFixed(2)) // Set carry forward to exactly current balance
       };
     });
 
-    const totalApprovedDepositsPool = monthDeposits
-      .filter(d => d.status === 'Approved')
-      .reduce((s, d) => s + d.amount, 0);
-
-    const closedSnapshot: ClosedMonthRecord = {
-      month: activeMonth,
-      closedAt: new Date().toISOString(),
-      closedBy: currentUser.name,
-      mealRate: currentMealRate,
-      totalMeals: totalMealsInMonth,
-      totalExpenses,
-      totalDeposits: totalApprovedDepositsPool,
-      memberSummaries: memberReportRows.map(r => ({
-        userId: r.userId,
-        name: r.name,
-        totalMeals: r.totalMeals,
-        billAmount: r.billAmount,
-        deposits: r.deposits,
-        carryForward: r.carryForward,
-        closingBalance: Number(r.balance.toFixed(2))
-      }))
-    };
-
-    const nextClosedMonths = [
-      closedSnapshot,
-      ...(settings.closedMonths || []).filter(c => c.month !== activeMonth)
-    ];
-
-    // 2. Lock setting & archive snapshot
+    // 2. Lock setting
     const nextSettings: SystemSettings = {
       ...settings,
-      isMonthClosed: true,
-      closedMonths: nextClosedMonths
+      isMonthClosed: true
     };
 
     onUpdateUsers(updatedUsersList);
     onUpdateSettings(nextSettings);
     onLogAction(
       'Month Closed', 
-      `Month (${activeMonthLabel}) closed successfully. Meal Rate finalized at ${currency}${currentMealRate.toFixed(4)}. Balances carried forward automatically.`
+      `Month closed successfully. Meal Rate finalized at ${currency}${currentMealRate.toFixed(4)}. Balances carried forward automatically.`
     );
 
     setIsClosingSuccess(true);
@@ -384,15 +328,6 @@ export default function ReportsTab({
     }, 2000);
   };
 
-  const handleCloseAndStartNextMonth = () => {
-    if (onStartNewMonth) {
-      onStartNewMonth(nextMonth, { autoCloseAndCarryForward: true });
-      setShowCloseModal(false);
-    } else {
-      handleCloseMonth();
-    }
-  };
-
   const handleReopenMonth = () => {
     const nextSettings: SystemSettings = {
       ...settings,
@@ -400,7 +335,7 @@ export default function ReportsTab({
     };
 
     onUpdateSettings(nextSettings);
-    onLogAction('Month Reopened', `Month (${activeMonthLabel}) reopened successfully by Administrator: ${currentUser.name}.`);
+    onLogAction('Month Reopened', `Month reopened successfully by Administrator: ${currentUser.name}.`);
     showToast(isBangla ? 'মাসটি পুনরায় উন্মুক্ত করা হয়েছে!' : 'Month has been successfully reopened!', 'success');
   };
 
@@ -410,35 +345,34 @@ export default function ReportsTab({
   const handleExportCSV = () => {
     let csv = '';
     let filename = '';
-    const fileMonthSlug = selectedMonth;
 
     if (activeTab === 'Monthly') {
-      csv = `Elite Mess Financial Statement - Monthly Report (${selectedMonthLabel})\n`;
+      csv = 'Elite Mess Financial Statement - Monthly Report (July 2026)\n';
       csv += `Calculated Meal Rate: ${currency}${currentMealRate.toFixed(4)}\n\n`;
       csv += 'Member Name,Own Meals,Guest Meals,Total Meals,Carry Forward,Total Deposits,Bill Amount,Balance,Status\n';
       memberReportRows.forEach(row => {
         csv += `"${row.name}",${row.ownMeals},${row.guestMeals},${row.totalMeals},${row.carryForward.toFixed(2)},${row.deposits.toFixed(2)},${row.billAmount.toFixed(2)},${row.balance.toFixed(2)},"${row.balance >= 0 ? 'Surplus' : 'Deficit'}"\n`;
       });
-      filename = `EliteMess_MonthlyReport_${fileMonthSlug}.csv`;
+      filename = 'EliteMess_MonthlyReport_July2026.csv';
     } 
     else if (activeTab === 'Daily') {
-      csv = `Elite Mess Daily Meals and Outflow Statement (${selectedMonthLabel})\n\n`;
+      csv = 'Elite Mess Daily Meals and Outflow Statement (July 2026)\n\n';
       csv += 'Date,Active Diners,Meals Count,Bazaar Cost,Overhead Expenses,Total Daily Outflow\n';
       dailyReports.forEach(r => {
         csv += `${r.date},${r.activeDiners},${r.mealsCount},${r.bazaarCost.toFixed(2)},${r.overheadCost.toFixed(2)},${r.totalOutflow.toFixed(2)}\n`;
       });
-      filename = `EliteMess_DailyReport_${fileMonthSlug}.csv`;
+      filename = 'EliteMess_DailyReport_July2026.csv';
     }
     else if (activeTab === 'Weekly') {
-      csv = `Elite Mess Weekly Metrics Summary (${selectedMonthLabel})\n\n`;
+      csv = 'Elite Mess Weekly Metrics Summary (July 2026)\n\n';
       csv += 'Week,Total Meals,Bazaar Cost,Overhead Expenses,Weekly Outflow,Estimated Meal Rate\n';
       weeklyReports.forEach(w => {
         csv += `"${w.name}",${w.mealsCount},${w.bazaarCost.toFixed(2)},${w.overheadCost.toFixed(2)},${w.totalOutflow.toFixed(2)},${w.estMealRate.toFixed(4)}\n`;
       });
-      filename = `EliteMess_WeeklyReport_${fileMonthSlug}.csv`;
+      filename = 'EliteMess_WeeklyReport_July2026.csv';
     }
     else if (activeTab === 'User') {
-      csv = `Elite Mess Member Ledger - ${selectedUserRow.name} (${selectedUserRow.email}) - ${selectedMonthLabel}\n`;
+      csv = `Elite Mess Member Ledger - ${selectedUserRow.name} (${selectedUserRow.email})\n`;
       csv += `Calculated Meal Rate: ${currency}${currentMealRate.toFixed(4)}\n\n`;
       csv += `Summary Metrics:\n`;
       csv += `Carry Forward: ${selectedUserRow.carryForward.toFixed(2)}\n`;
@@ -451,34 +385,34 @@ export default function ReportsTab({
       userDailyLedger.forEach(d => {
         csv += `${d.date},${d.breakfast ? 'Yes' : 'No'},${d.lunch ? 'Yes' : 'No'},${d.dinner ? 'Yes' : 'No'},${d.guestBreakfast},${d.guestLunch},${d.guestDinner},${d.total},${d.cost.toFixed(2)}\n`;
       });
-      filename = `EliteMess_UserReport_${selectedUserRow.name.replace(/\s+/g, '_')}_${fileMonthSlug}.csv`;
+      filename = `EliteMess_UserReport_${selectedUserRow.name.replace(/\s+/g, '_')}_July2026.csv`;
     }
     else if (activeTab === 'Bazaar') {
-      csv = `Elite Mess Approved Bazaar Outlay Ledger (${selectedMonthLabel})\n\n`;
+      csv = 'Elite Mess Approved Bazaar Outlay Ledger (July 2026)\n\n';
       csv += 'Date,Item Description,Quantity & Unit,Total Price,Approved Status\n';
-      monthBazaarEntries.filter(b => b.status === 'Approved').forEach(b => {
+      bazaarEntries.filter(b => b.status === 'Approved').forEach(b => {
         csv += `${b.date},"${b.items}","${b.quantity} ${b.unit || ''}",${b.price},"${b.status}"\n`;
       });
-      filename = `EliteMess_BazaarReport_${fileMonthSlug}.csv`;
+      filename = 'EliteMess_BazaarReport_July2026.csv';
     }
     else if (activeTab === 'Deposit') {
-      csv = `Elite Mess Verified Deposit Ledger (${selectedMonthLabel})\n\n`;
+      csv = 'Elite Mess Verified Deposit Ledger (July 2026)\n\n';
       csv += 'Date,Member Name,Amount,Payment Method,Transaction ID,Status,Note\n';
-      monthDeposits.filter(d => d.status === 'Approved').forEach(d => {
+      deposits.filter(d => d.status === 'Approved').forEach(d => {
         const u = allUsers.find(x => x.id === d.userId)?.name || 'Unknown';
         csv += `${d.date},"${u}",${d.amount},"${d.method}","${d.transactionId || ''}","${d.status || 'Approved'}","${d.note || ''}"\n`;
       });
-      filename = `EliteMess_DepositReport_${fileMonthSlug}.csv`;
+      filename = 'EliteMess_DepositReport_July2026.csv';
     }
     else if (activeTab === 'GuestMeal') {
-      csv = `Elite Mess Guest Meals Board & Expenses (${selectedMonthLabel})\n`;
+      csv = 'Elite Mess Guest Meals Board & Expenses (July 2026)\n';
       csv += `Calculated Meal Rate: ${currency}${currentMealRate.toFixed(4)}\n\n`;
       csv += 'Host Member,Guest Breakfasts,Guest Lunches,Guest Dinners,Total Guest Meals,Guest Bill Owed\n';
       memberReportRows.forEach(row => {
         const guestBill = row.guestMeals * currentMealRate;
         csv += `"${row.name}",${row.guestBreakfast},${row.guestLunch},${row.guestDinner},${row.guestMeals},${guestBill.toFixed(2)}\n`;
       });
-      filename = `EliteMess_GuestMealReport_${fileMonthSlug}.csv`;
+      filename = 'EliteMess_GuestMealReport_July2026.csv';
     }
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -545,58 +479,29 @@ export default function ReportsTab({
           </p>
         </div>
 
-        {/* MONTH SELECTOR & CLOSING STATUS / ROLLOVER BUTTON */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 shadow-xs">
-            <Calendar size={14} className="text-emerald-600 dark:text-emerald-400" />
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="text-xs font-bold bg-transparent text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
-            >
-              {monthOptions.map(m => (
-                <option key={m} value={m} className="bg-white dark:bg-slate-900">
-                  {formatMonthLabel(m, settings.language)}{m === activeMonth ? (isBangla ? ' (চলতি)' : ' (Active)') : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
+        {/* MONTH CLOSING STATUS / BUTTON */}
+        <div className="flex items-center gap-2">
           {settings.isMonthClosed ? (
-            <div className="flex flex-wrap items-center gap-2 bg-indigo-500/10 border border-indigo-500/25 px-3.5 py-2 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold text-xs">
+            <div className="flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/25 px-4 py-2 rounded-xl text-indigo-600 dark:text-indigo-400 font-bold text-xs">
               <Lock size={14} className="shrink-0" />
-              <span>{isBangla ? `${activeMonthLabel} ক্লোজড` : `${activeMonthLabel} Closed`}</span>
+              <span>{isBangla ? 'চলতি মাস ক্লোজড ও রিড-অনলি' : 'Month Closed (Read-Only)'}</span>
               {role === 'Admin' && (
-                <>
-                  <button
-                    onClick={handleReopenMonth}
-                    className="ml-2 px-2 py-0.5 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-bold uppercase transition cursor-pointer"
-                  >
-                    {isBangla ? 'রিওপেন' : 'Reopen'}
-                  </button>
-                  {onStartNewMonth && (
-                    <button
-                      onClick={() => onStartNewMonth(nextMonth)}
-                      className="ml-1 px-2.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <ArrowRight size={11} />
-                      <span>{isBangla ? `${nextMonthLabel} শুরু করুন` : `Start ${nextMonthLabel}`}</span>
-                    </button>
-                  )}
-                </>
+                <button
+                  onClick={handleReopenMonth}
+                  className="ml-3 px-2 py-0.5 bg-rose-500 hover:bg-rose-600 text-white rounded text-[10px] font-bold uppercase transition"
+                >
+                  {isBangla ? 'রিওপেন করুন' : 'Reopen'}
+                </button>
               )}
             </div>
           ) : (
             isManagerOrAdmin && (
               <button
-                onClick={() => {
-                  setSelectedMonth(activeMonth);
-                  setShowCloseModal(true);
-                }}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-rose-500/10 transition cursor-pointer"
+                onClick={() => setShowCloseModal(true)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md shadow-rose-500/10 transition"
               >
                 <Lock size={14} />
-                <span>{isBangla ? `${activeMonthLabel} ক্লোজ / নতুন মাস` : `Close ${activeMonthLabel}`}</span>
+                <span>{isBangla ? 'মাস সমাপ্ত করুন (ক্লোজিং)' : 'Close Month Gateway'}</span>
               </button>
             )
           )}
@@ -677,9 +582,9 @@ export default function ReportsTab({
               {isBangla ? 'অনুমোদিত তহবিল আমানত' : 'Total Deposits Pool'}
             </span>
             <h3 className="text-lg font-black text-indigo-600 dark:text-indigo-400 mt-1">
-              {currency}{monthDeposits.filter(d => d.status === 'Approved').reduce((s,d) => s+d.amount,0).toLocaleString()}
+              {currency}{deposits.filter(d => d.status === 'Approved').reduce((s,d) => s+d.amount,0).toLocaleString()}
             </h3>
-            <p className="text-[9px] text-slate-450 mt-1">{isBangla ? `${selectedMonthLabel} এর অনুমোদিত আমানত` : `Approved funds (${selectedMonthLabel})`}</p>
+            <p className="text-[9px] text-slate-450 mt-1">{isBangla ? 'অনুমোদিত মেস সদস্য আমানত' : 'Approved funds in hand'}</p>
           </div>
         </div>
       )}
@@ -719,10 +624,10 @@ export default function ReportsTab({
 
           {['Daily', 'Weekly', 'Bazaar', 'Deposit', 'GuestMeal'].includes(activeTab) && (
             <div className="text-xs font-bold text-slate-650 dark:text-slate-400">
-              {activeTab === 'Daily' && (isBangla ? `${selectedMonthLabel} মাসের ${daysInMonth} দিনের তালিকা` : `Daily schedule list for ${selectedMonthLabel} (Days 1 - ${daysInMonth})`)}
-              {activeTab === 'Weekly' && (isBangla ? `${weeklyReports.length}টি ধাপে বিভক্ত সাপ্তাহিক হিসাব` : `Weekly analysis grouped by ${weeklyReports.length} weeks`)}
-              {activeTab === 'Bazaar' && (isBangla ? 'অনুমোদিত বাজার খরচসমূহের অডিট খতিয়ান' : `Audit trail for approved bazaar entries (${selectedMonthLabel})`)}
-              {activeTab === 'Deposit' && (isBangla ? 'অনুমোদিত আমানতসমূহের মেমো খতিয়ান' : `Verified deposit record registry (${selectedMonthLabel})`)}
+              {activeTab === 'Daily' && (isBangla ? 'চলতি মাসের ৩১ দিনের তালিকা' : 'Daily schedule list from July 1 to 31')}
+              {activeTab === 'Weekly' && (isBangla ? '৫টি ধাপে বিভক্ত সাপ্তাহিক হিসাব' : 'Weekly analysis grouped by weeks')}
+              {activeTab === 'Bazaar' && (isBangla ? 'অনুমোদিত বাজার খরচসমূহের অডিট খতিয়ান' : 'Audit trail for approved bazaar entries')}
+              {activeTab === 'Deposit' && (isBangla ? 'অনুমোদিত আমানতসমূহের মেমো খতিয়ান' : 'Verified deposit record registry')}
               {activeTab === 'GuestMeal' && (isBangla ? 'অতিথি মিলেদের বিবরণী ও হোস্ট অনুযায়ী বিল' : 'Guest meals hosted details and estimates')}
             </div>
           )}
@@ -755,7 +660,7 @@ export default function ReportsTab({
         
         {/* PRINT ONLY REPORT BRANDING */}
         <div className="hidden print:block mb-6 border-b border-slate-300 pb-4">
-          <h1 className="text-2xl font-extrabold">{settings.systemName || 'Elite Mess'} - {selectedMonthLabel} Reports</h1>
+          <h1 className="text-2xl font-extrabold">{settings.systemName || 'Elite Mess'} - July 2026 Reports</h1>
           <p className="text-sm text-slate-500">
             Exported By: {currentUser.name} ({currentUser.role}) on {new Date().toLocaleDateString()}
           </p>
@@ -1122,7 +1027,7 @@ export default function ReportsTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {monthBazaarEntries.filter(b => b.status === 'Approved').map((b) => (
+                  {bazaarEntries.filter(b => b.status === 'Approved').map((b) => (
                     <tr key={b.id} className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
                       <td className="px-5 py-3 font-semibold">{b.date}</td>
                       <td className="px-5 py-3 font-bold text-slate-800 dark:text-white">{b.items}</td>
@@ -1146,7 +1051,7 @@ export default function ReportsTab({
                     </tr>
                   ))}
 
-                  {monthBazaarEntries.filter(b => b.status === 'Approved').length === 0 && (
+                  {bazaarEntries.filter(b => b.status === 'Approved').length === 0 && (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-xs text-slate-450 font-medium">
                         {isBangla ? 'কোনো অনুমোদিত বাজার রেকর্ড নেই।' : 'No approved bazaar records found.'}
@@ -1166,7 +1071,7 @@ export default function ReportsTab({
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="p-4 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center">
               <h4 className="font-bold text-slate-800 dark:text-white text-xs">{isBangla ? 'সদস্যদের অনুমোদিত চূড়ান্ত ডিপোজিটের খতিয়ান' : 'Verified wallet deposits log'}</h4>
-              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{isBangla ? 'সর্বমোট আমানত:' : 'Deposits Total:'} {currency}{monthDeposits.filter(d => d.status === 'Approved').reduce((s,d)=>s+d.amount,0).toLocaleString()}</span>
+              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{isBangla ? 'সর্বমোট আমানত:' : 'Deposits Total:'} {currency}{deposits.filter(d => d.status === 'Approved').reduce((s,d)=>s+d.amount,0).toLocaleString()}</span>
             </div>
 
             <div className="overflow-x-auto">
@@ -1182,7 +1087,7 @@ export default function ReportsTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {monthDeposits.filter(d => d.status === 'Approved').map((d) => {
+                  {deposits.filter(d => d.status === 'Approved').map((d) => {
                     const u = allUsers.find(x => x.id === d.userId);
                     return (
                       <tr key={d.id} className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
@@ -1198,7 +1103,7 @@ export default function ReportsTab({
                     );
                   })}
 
-                  {monthDeposits.filter(d => d.status === 'Approved').length === 0 && (
+                  {deposits.filter(d => d.status === 'Approved').length === 0 && (
                     <tr>
                       <td colSpan={6} className="py-12 text-center text-xs text-slate-450 font-medium">
                         {isBangla ? 'কোনো অনুমোদিত আমানত পাওয়া যায়নি।' : 'No verified deposits found.'}
@@ -1299,10 +1204,10 @@ export default function ReportsTab({
                   </div>
                   <div>
                     <h3 className="text-base font-black text-slate-850 dark:text-white">
-                      {isBangla ? `চূড়ান্ত মাস সমাপ্তি (${activeMonthLabel})` : `Close & Finalize ${activeMonthLabel}`}
+                      {isBangla ? 'চূড়ান্ত মাস সমাপ্তি (Month Closing)' : 'Lock & Finalize Month Closing'}
                     </h3>
                     <p className="text-xs text-slate-450">
-                      {isBangla ? 'চলতি চক্রের হিসাব ক্লোজিং এবং উদ্বৃত্ত স্থানান্তর গেটওয়ে।' : 'Carry forward net balances and lock or start next month.'}
+                      {isBangla ? 'চলতি চক্রের হিসাব ক্লোজিং এবং উদ্বৃত্ত স্থানান্তর গেটওয়ে।' : 'Carry forward net balances and lock editing.'}
                     </p>
                   </div>
                 </div>
@@ -1344,34 +1249,25 @@ export default function ReportsTab({
                   <AlertTriangle size={18} className="shrink-0 text-rose-500" />
                   <p className="leading-relaxed text-[11px]">
                     {isBangla 
-                      ? 'সতর্কতা: মাস বন্ধ করার পর মেম্বাররা আর তাদের মিল পরিবর্তন করতে পারবেন না এবং বাজার বা ডিপোজিটের কোনো নতুন দাবী করা যাবে না। পরের মাসে যেতে "নতুন মাস শুরু করুন" বাটনে ক্লিক করুন।' 
-                      : 'Closing locks the active month and copies remaining balances to carry-forward. Use "Close & Start Next Month" to immediately open the next billing cycle.'}
+                      ? 'সতর্কতা: মাস বন্ধ করার পর মেম্বাররা আর তাদের মিল পরিবর্তন করতে পারবেন না এবং বাজার বা ডিপোজিটের কোনো নতুন দাবী করা যাবে না। শুধুমাত্র এডমিন এটি পুনরায় খুলতে পারেন।' 
+                      : 'Closing locks the month: All user meal calendars, approved deposits, overhead logs, and bazaar entries will become strictly read-only. Only Admin can reopen.'}
                   </p>
                 </div>
 
-                {/* Submit buttons */}
-                <div className="flex flex-col sm:flex-row gap-2.5 pt-2 border-t border-slate-50 dark:border-slate-800">
+                {/* Submit button */}
+                <div className="flex gap-2.5 pt-2 border-t border-slate-50 dark:border-slate-800">
                   <button
                     onClick={() => setShowCloseModal(false)}
-                    className="py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-350 font-bold text-xs rounded-xl transition cursor-pointer"
+                    className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-350 font-bold text-xs rounded-xl transition"
                   >
                     {isBangla ? 'বাতিল' : 'Cancel'}
                   </button>
                   <button
                     onClick={handleCloseMonth}
-                    className="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-500/10 transition cursor-pointer"
+                    className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md shadow-rose-500/10 transition"
                   >
-                    {isBangla ? 'শুধু লক ও ক্লোজ করুন' : 'Lock & Finalize Closing'}
+                    {isBangla ? 'নিশ্চিত করুন এবং ক্লোজ করুন' : 'Lock & Finalize Closing'}
                   </button>
-                  {onStartNewMonth && role === 'Admin' && (
-                    <button
-                      onClick={handleCloseAndStartNextMonth}
-                      className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-500/15 flex items-center justify-center gap-1.5 transition cursor-pointer"
-                    >
-                      <ArrowRight size={14} />
-                      <span>{isBangla ? `ক্লোজ ও ${nextMonthLabel} শুরু` : `Close & Start ${nextMonthLabel}`}</span>
-                    </button>
-                  )}
                 </div>
 
               </div>
