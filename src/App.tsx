@@ -67,6 +67,7 @@ const ReportsTab = React.lazy(() => import('./components/ReportsTab'));
 const UsersTab = React.lazy(() => import('./components/UsersTab'));
 const SettingsTab = React.lazy(() => import('./components/SettingsTab'));
 const AuditLogTab = React.lazy(() => import('./components/AuditLogTab'));
+const HelpGuideTab = React.lazy(() => import('./components/HelpGuideTab'));
 
 import { useFeedback } from './components/FeedbackContext';
 
@@ -956,12 +957,12 @@ export default function App() {
     }
 
     // Access control logic
-    const adminTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'Users', 'AuditLogs', 'Settings'];
-    const managerTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'AuditLogs', 'Settings'];
+    const adminTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'Users', 'AuditLogs', 'Settings', 'HelpAndAI'];
+    const managerTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'AuditLogs', 'Settings', 'HelpAndAI'];
     if (settings?.mgrCanManageUsers) {
       managerTabs.push('Users');
     }
-    const memberTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'Settings'];
+    const memberTabs = ['Dashboard', 'MealSheet', 'Bazaar', 'Deposits', 'Expenses', 'Notices', 'Reports', 'AuditLogs', 'Settings', 'HelpAndAI'];
 
     let allowedTabs = adminTabs;
     if (currentUser.role === 'Meal Manager') {
@@ -2690,6 +2691,15 @@ export default function App() {
   // RENDERING TAB DISPATCHER
   // -------------------------------------------------------------------
   const renderTabContent = () => {
+    const visibleActivityLogs =
+      currentPersona === 'Member'
+        ? activityLogs.filter(
+            (log) =>
+              log.userId === currentUser.id ||
+              (!log.userId && log.userName === currentUser.name)
+          )
+        : activityLogs;
+
     switch (currentTab) {
       case 'Dashboard':
         return (
@@ -2702,7 +2712,7 @@ export default function App() {
             bazaarEntries={bazaarEntries}
             expenses={expenses}
             notices={notices}
-            activities={activityLogs}
+            activities={visibleActivityLogs}
             settings={settings}
             vacationPeriods={vacations}
             onQuickAction={(action) => {
@@ -2895,7 +2905,10 @@ export default function App() {
       case 'AuditLogs':
         return (
           <AuditLogTab
-            activities={activityLogs}
+            activities={visibleActivityLogs}
+            role={currentPersona}
+            currentUserId={currentUser.id}
+            settings={settings}
           />
         );
       case 'Settings':
@@ -2922,6 +2935,22 @@ export default function App() {
               assignedBazaarPersons,
               settings,
             }}
+          />
+        );
+      case 'HelpAndAI':
+        return (
+          <HelpGuideTab
+            currentUser={currentUser}
+            role={currentPersona}
+            allUsers={users}
+            meals={meals}
+            deposits={deposits}
+            bazaarEntries={bazaarEntries}
+            expenses={expenses}
+            settings={settings}
+            assignedBazaarPersons={assignedBazaarPersons}
+            vacationPeriods={vacations}
+            onNavigateTab={(tab) => setCurrentTab(tab)}
           />
         );
       default:

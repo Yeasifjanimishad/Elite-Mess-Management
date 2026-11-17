@@ -15,6 +15,7 @@ import {
   UserCheck,
   FlameKindling,
   LogOut,
+  BookOpen,
 } from 'lucide-react';
 import { User, UserRole, SystemSettings } from '../types';
 
@@ -150,13 +151,27 @@ export default function Sidebar({
           name: 'Activity Log',
           bnName: 'অ্যাক্টিভিটি লগ',
           icon: ShieldAlert,
-          roles: ['Admin', 'Meal Manager'],
+          roles: ['Admin', 'Meal Manager', 'Member'],
         },
         {
           id: 'Settings',
           name: 'Settings',
           bnName: 'সেটিংস',
           icon: Settings,
+          roles: ['Admin', 'Meal Manager', 'Member'],
+        },
+      ],
+    },
+    {
+      id: 'help',
+      label: 'Support & AI',
+      bnLabel: 'সহায়তা ও AI',
+      items: [
+        {
+          id: 'HelpAndAI',
+          name: 'User Manual & AI',
+          bnName: 'নির্দেশিকা ও AI',
+          icon: BookOpen,
           roles: ['Admin', 'Meal Manager', 'Member'],
         },
       ],

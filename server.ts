@@ -2,13 +2,14 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
-const RECEIPT_MODEL = 'gemini-4-hydrogen';
+const FAST_TEXT_MODEL = 'gemini-3.1-flash-lite';
+const RECEIPT_MODEL = 'gemini-3.1-flash-lite';
 
 const allowedUnits = ['kg', 'Liter', 'pcs', 'Dozen', 'Packets', 'Bags', 'Other'] as const;
 
@@ -19,6 +20,23 @@ interface ParsedReceiptPayload {
   price: number;
   total: number;
   notes: string;
+}
+
+function parseGeminiError(err: unknown, fallback: string): { status: number; message: string } {
+  let status = 500;
+  let message = err instanceof Error ? err.message : fallback;
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed?.error?.message) {
+      message = String(parsed.error.message);
+    }
+    if (typeof parsed?.error?.code === 'number') {
+      status = parsed.error.code;
+    }
+  } catch {
+    // Keep raw error message if not JSON
+  }
+  return { status, message };
 }
 
 function createGeminiClient(): GoogleGenAI | null {
@@ -47,7 +65,7 @@ async function resolveImageToInlineData(imageInput: string): Promise<{ mimeType:
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
-    const imgResp = await fetch(trimmed);
+    const imgResp = await fetch(trimmed, { signal: AbortSignal.timeout(10000) });
     if (!imgResp.ok) {
       throw new Error(`Could not fetch receipt image URL (HTTP ${imgResp.status}).`);
     }
@@ -120,6 +138,7 @@ async function startServer() {
           },
         ],
         config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -166,9 +185,110 @@ async function startServer() {
         },
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to scan receipt.';
+      const { status, message } = parseGeminiError(err, 'Failed to scan receipt.');
       console.error('[scan-receipt] Error:', message);
-      res.status(500).json({ error: message });
+      res.status(status).json({ error: message });
+    }
+  });
+
+  app.post('/api/ai-assistant', async (req, res) => {
+    const ai = createGeminiClient();
+    if (!ai) {
+      res.status(500).json({
+        error: 'GEMINI_API_KEY is not configured on the server.',
+      });
+      return;
+    }
+
+    const { messages, context, stream } = (req.body || {}) as {
+      messages?: Array<{ role: string; content: string }>;
+      context?: Record<string, unknown>;
+      stream?: boolean;
+    };
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: 'At least one message is required.' });
+      return;
+    }
+
+    const wantStream = Boolean(stream) || req.headers.accept?.includes('text/event-stream');
+
+    const systemInstruction = [
+      'You are the concise, helpful AI Assistant for a shared hostel/bachelor Mess Management System (MMS).',
+      'Tabs: Overview (today/tomorrow meals, live meal rate, due pay banner, quick toggle), Meal Sheet (Breakfast 0.5/Lunch 1/Dinner 1, Guest meals, daily lock cutoff, Vacation Mode, Manager adjustments), Bazaar Log (assigned buyers, Auto-Rotate duty, Reminder, Upload/Camera receipt + AI Scan, Approve/Reject queue), Deposits (dues, 1-click bKash/Nagad copy, Carry Forward, Approve queue), Utilities & Bills (Gas/Elec/Internet/Water/Maid), Notice Board, Reports (Meal Rate = (Approved Bazaar+Overheads)/Total Meals, Member Detail, CSV/PDF export, Copy/WhatsApp Bill Slip, Month Closing/Carry-Forward rollover), Members (Admin/permitted Manager), Activity Log (Admin/Meal Manager: all members; Member: own activity only), Settings (Lock time, Currency, Guest limit, Language, Auto-ON toggle, bKash/Nagad numbers, Manager permissions, JSON Backup), Header (Month pill, Theme Palette, Notification Bell).',
+      `Live Context: ${JSON.stringify(context || {})}`,
+      'Rules: Tailor strictly to context.role (Admin/Meal Manager/Member). Match user language (Bangla, Banglish, or English). Be fast, practical, and concise (short bullets, ~60-140 words unless asked for deeper detail). Use exact numbers from context; never invent nonexistent features.',
+    ].join('\n');
+
+    const formattedContents = messages
+      .filter(m => m && typeof m.content === 'string' && m.content.trim().length > 0)
+      .slice(-8)
+      .map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content.trim() }],
+      }));
+
+    if (wantStream) {
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
+
+      try {
+        const streamResp = await ai.models.generateContentStream({
+          model: FAST_TEXT_MODEL,
+          contents: formattedContents,
+          config: {
+            thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+            systemInstruction,
+          },
+        });
+
+        let hasContent = false;
+        for await (const chunk of streamResp) {
+          const text = chunk.text;
+          if (text) {
+            hasContent = true;
+            res.write(`data: ${JSON.stringify({ chunk: text })}\n\n`);
+          }
+        }
+
+        if (!hasContent) {
+          res.write(`data: ${JSON.stringify({ error: 'AI returned an empty response.' })}\n\n`);
+        } else {
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        }
+        res.end();
+      } catch (err: unknown) {
+        const { message } = parseGeminiError(err, 'AI assistant failed to respond.');
+        console.error('[ai-assistant stream] Error:', message);
+        res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
+        res.end();
+      }
+      return;
+    }
+
+    try {
+      const response = await ai.models.generateContent({
+        model: FAST_TEXT_MODEL,
+        contents: formattedContents,
+        config: {
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+          systemInstruction,
+        },
+      });
+
+      const reply = response.text?.trim();
+      if (!reply) {
+        throw new Error('AI returned an empty response.');
+      }
+
+      res.json({ success: true, reply });
+    } catch (err: unknown) {
+      const { status, message } = parseGeminiError(err, 'AI assistant failed to respond.');
+      console.error('[ai-assistant] Error:', message);
+      res.status(status).json({ error: message });
     }
   });
 

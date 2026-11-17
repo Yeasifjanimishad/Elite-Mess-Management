@@ -1462,13 +1462,21 @@ export default function DashboardTab({
                   </div>
                 )}
 
-                {isManagerOrAdmin && onNavigateTab && (
+                {onNavigateTab && (
                   <button
                     type="button"
                     onClick={() => onNavigateTab('AuditLogs')}
                     className="w-full py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5 rounded-xl transition cursor-pointer inline-flex items-center justify-center gap-1"
                   >
-                    <span>{isBangla ? 'পূর্ণ অডিট লগ দেখুন' : 'View Audit Logs'}</span>
+                    <span>
+                      {isManagerOrAdmin
+                        ? isBangla
+                          ? 'পূর্ণ অডিট লগ দেখুন'
+                          : 'View Audit Logs'
+                        : isBangla
+                        ? 'আমার অ্যাক্টিভিটি লগ দেখুন'
+                        : 'View My Activity Log'}
+                    </span>
                     <ArrowRight size={13} />
                   </button>
                 )}

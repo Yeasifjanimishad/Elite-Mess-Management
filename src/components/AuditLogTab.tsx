@@ -16,14 +16,25 @@ import {
   SlidersHorizontal,
   Info
 } from 'lucide-react';
-import { ActivityLog } from '../types';
+import { ActivityLog, SystemSettings, UserRole } from '../types';
 import { getRealTodayStr } from '../utils/dateUtils';
 
 interface AuditLogTabProps {
   activities: ActivityLog[];
+  role?: UserRole;
+  currentUserId?: string;
+  settings?: SystemSettings;
 }
 
-export default function AuditLogTab({ activities }: AuditLogTabProps) {
+export default function AuditLogTab({ activities, role, currentUserId, settings }: AuditLogTabProps) {
+  const isBangla = settings?.language === 'Bangla';
+  const isMemberOnly = role === 'Member';
+
+  const scopedActivities =
+    isMemberOnly && currentUserId
+      ? activities.filter((act) => act.userId === currentUserId)
+      : activities;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [actionFilter, setActionFilter] = useState<string>('All');
   const [userFilter, setUserFilter] = useState<string>('All');
@@ -45,16 +56,16 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
     'Settings Changes'
   ];
 
-  // Extract unique users from activities
-  const uniqueUsers = Array.from(new Set(activities.map(a => a.userName))).filter(Boolean);
+  // Extract unique users from scoped activities
+  const uniqueUsers = Array.from(new Set(scopedActivities.map(a => a.userName))).filter(Boolean);
 
   // Filter logs based on search query, action type and user filter
-  const filteredActivities = activities.filter(act => {
+  const filteredActivities = scopedActivities.filter(act => {
     const textToSearch = `${act.userName} ${act.action} ${act.details} ${act.oldValue || ''} ${act.newValue || ''} ${act.ipAddress || ''} ${act.device || ''}`.toLowerCase();
     const matchesSearch = textToSearch.includes(searchQuery.toLowerCase());
     
     const matchesAction = actionFilter === 'All' || act.action === actionFilter;
-    const matchesUser = userFilter === 'All' || act.userName === userFilter;
+    const matchesUser = isMemberOnly || userFilter === 'All' || act.userName === userFilter;
 
     return matchesSearch && matchesAction && matchesUser;
   });
@@ -95,8 +106,8 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
   };
 
   // Stats calculation
-  const totalAuditCount = activities.length;
-  const lastActiveTimestamp = activities[0]?.timestamp ? new Date(activities[0].timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A';
+  const totalAuditCount = scopedActivities.length;
+  const lastActiveTimestamp = scopedActivities[0]?.timestamp ? new Date(scopedActivities[0].timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A';
 
   return (
     <div className="space-y-6" id="audit-log-tab">
@@ -159,11 +170,11 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
           {/* Free Text Search */}
-          <div className="relative md:col-span-5">
+          <div className={`relative ${isMemberOnly ? 'md:col-span-7' : 'md:col-span-5'}`}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
             <input
               type="text"
-              placeholder="Search by name, action details, IP, old/new states..."
+              placeholder={isBangla ? 'কার্যক্রম, বিস্তারিত বা ডিভাইস দিয়ে খুঁজুন...' : 'Search by name, action details, IP, old/new states...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 rounded-xl text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
@@ -171,50 +182,63 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
           </div>
 
           {/* Action Filter */}
-          <div className="relative md:col-span-4 flex items-center gap-1.5">
+          <div className={`relative flex items-center gap-1.5 ${isMemberOnly ? 'md:col-span-5' : 'md:col-span-4'}`}>
             <Filter size={14} className="text-slate-400 shrink-0" />
             <select
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
               className="w-full text-xs bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold transition"
             >
-              <option value="All">All Operations</option>
+              <option value="All">{isBangla ? 'সব কার্যক্রম' : 'All Operations'}</option>
               {auditActions.map(action => (
                 <option key={action} value={action}>{action}</option>
               ))}
             </select>
           </div>
 
-          {/* User Filter */}
-          <div className="relative md:col-span-3 flex items-center gap-1.5">
-            <User size={14} className="text-slate-400 shrink-0" />
-            <select
-              value={userFilter}
-              onChange={(e) => setUserFilter(e.target.value)}
-              className="w-full text-xs bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold transition"
-            >
-              <option value="All">All Users</option>
-              {uniqueUsers.map(u => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
-          </div>
+          {/* User Filter (Admin & Meal Manager only) */}
+          {!isMemberOnly && (
+            <div className="relative md:col-span-3 flex items-center gap-1.5">
+              <User size={14} className="text-slate-400 shrink-0" />
+              <select
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value)}
+                className="w-full text-xs bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold transition"
+              >
+                <option value="All">{isBangla ? 'সকল সদস্য' : 'All Users'}</option>
+                {uniqueUsers.map(u => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
       {/* SYSTEM LOG TABLE / TIMELINE ROW LIST */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
         
-        <div className="border-b border-slate-100 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
+        <div className="border-b border-slate-100 dark:border-slate-800 px-6 py-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
-              <ShieldAlert size={18} className="text-slate-500" /> Immutable Mess Logs
+              <ShieldAlert size={18} className="text-slate-500" />{' '}
+              {isMemberOnly
+                ? isBangla
+                  ? 'আমার অ্যাক্টিভিটি লগ'
+                  : 'My Activity Log'
+                : isBangla
+                ? 'মেস অডিট লগ (সকল সদস্য)'
+                : 'Immutable Mess Logs'}
             </h3>
             <p className="text-xs text-slate-400 dark:text-slate-400 mt-0.5">
-              Secure ledger changes, auth updates, meal adjust metrics and notice publications.
+              {isMemberOnly
+                ? isBangla
+                  ? 'এখানে শুধু আপনার নিজের অ্যাকাউন্টের লগইন, মিল পরিবর্তন, বাজার ও ডিপোজিট কার্যক্রম দেখা যাবে।'
+                  : 'Personal timeline of your own logins, meal updates, bazaar claims, and deposits.'
+                : 'Secure ledger changes, auth updates, meal adjust metrics and notice publications.'}
             </p>
           </div>
-          <span className="text-[10px] bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-700 px-2 py-1 rounded-lg font-mono">
+          <span className="text-[10px] bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-700 px-2 py-1 rounded-lg font-mono shrink-0">
             Showing {filteredActivities.length} logs
           </span>
         </div>
