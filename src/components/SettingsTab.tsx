@@ -24,7 +24,13 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { SystemSettings, UserRole } from '../types';
-import { formatMonthLabel, getNextMonth, getRealCurrentMonth } from '../utils/dateUtils';
+import {
+  formatMonthLabel,
+  getNextMonth,
+  getRealCurrentMonth,
+  parseTime24To12,
+  formatTime12To24
+} from '../utils/dateUtils';
 
 interface SettingsTabProps {
   role: UserRole;
@@ -370,17 +376,68 @@ export default function SettingsTab({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                    {isBangla ? 'মিল লক করার সময়' : 'Daily Meal Lock Time (24h format)'}
+                    {isBangla ? 'মিল লক করার সময় (১২ ঘণ্টা)' : 'Daily Meal Lock Time (12h format)'}
                   </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 22:00"
-                    required
-                    disabled={!isAdmin}
-                    value={formData.mealLockTime}
-                    onChange={(e) => handleChange('mealLockTime', e.target.value)}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
+                  {(() => {
+                    const { hour12, minute, period } = parseTime24To12(formData.mealLockTime);
+                    return (
+                      <div className="grid grid-cols-3 gap-2">
+                        <select
+                          aria-label="Lock hour"
+                          disabled={!isAdmin}
+                          value={hour12}
+                          onChange={(e) =>
+                            handleChange(
+                              'mealLockTime',
+                              formatTime12To24(Number(e.target.value), minute, period)
+                            )
+                          }
+                          className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                            <option key={h} value={h}>
+                              {String(h).padStart(2, '0')}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          aria-label="Lock minute"
+                          disabled={!isAdmin}
+                          value={minute}
+                          onChange={(e) =>
+                            handleChange(
+                              'mealLockTime',
+                              formatTime12To24(hour12, Number(e.target.value), period)
+                            )
+                          }
+                          className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                        >
+                          {Array.from({ length: 60 }, (_, m) => (
+                            <option key={m} value={m}>
+                              {String(m).padStart(2, '0')}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          aria-label="Lock AM or PM"
+                          disabled={!isAdmin}
+                          value={period}
+                          onChange={(e) =>
+                            handleChange(
+                              'mealLockTime',
+                              formatTime12To24(hour12, minute, e.target.value as 'AM' | 'PM')
+                            )
+                          }
+                          className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold disabled:opacity-75 disabled:cursor-not-allowed"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

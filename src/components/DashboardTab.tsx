@@ -44,7 +44,9 @@ import {
   formatShortMonth,
   formatDateDisplay,
   formatMonthDayLabel,
-  getEffectiveDatesForMonth
+  getEffectiveDatesForMonth,
+  parseLockHourMinute,
+  formatTime12hDisplay
 } from '../utils/dateUtils';
 
 interface DashboardTabProps {
@@ -360,7 +362,7 @@ export default function DashboardTab({
     if (settings.lockOverride) return false;
 
     const now = new Date();
-    const [lockHour, lockMinute] = settings.mealLockTime.split(':').map(Number);
+    const { hour: lockHour, minute: lockMinute } = parseLockHourMinute(settings.mealLockTime);
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
 
@@ -389,8 +391,8 @@ export default function DashboardTab({
     if (!isManagerOrAdmin && checkIsTomorrowLocked()) {
       showToast(
         isBangla
-          ? `আগামীকালের মিল লক করা হয়েছে। শেষ সময় ছিল ${settings.mealLockTime}।`
-          : `Meals are locked for tomorrow. The deadline was ${settings.mealLockTime}.`,
+          ? `আগামীকালের মিল লক করা হয়েছে। শেষ সময় ছিল ${formatTime12hDisplay(settings.mealLockTime)}।`
+          : `Meals are locked for tomorrow. The deadline was ${formatTime12hDisplay(settings.mealLockTime)}.`,
         "warning"
       );
       return;
@@ -462,8 +464,8 @@ export default function DashboardTab({
     if (!isManagerOrAdmin && checkIsTomorrowLocked()) {
       showToast(
         isBangla
-          ? `আগামীকালের মিল লক করা হয়েছে। শেষ সময় ছিল ${settings.mealLockTime}।`
-          : `Meals are locked for tomorrow. The deadline was ${settings.mealLockTime}.`,
+          ? `আগামীকালের মিল লক করা হয়েছে। শেষ সময় ছিল ${formatTime12hDisplay(settings.mealLockTime)}।`
+          : `Meals are locked for tomorrow. The deadline was ${formatTime12hDisplay(settings.mealLockTime)}.`,
         "warning"
       );
       return;
@@ -810,8 +812,8 @@ export default function DashboardTab({
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {isBangla
-                    ? `শেষ সময়: আজ ${settings.mealLockTime}`
-                    : `Daily cutoff at ${settings.mealLockTime}`}
+                    ? `শেষ সময়: আজ ${formatTime12hDisplay(settings.mealLockTime)}`
+                    : `Daily cutoff at ${formatTime12hDisplay(settings.mealLockTime)}`}
                 </p>
               </div>
 

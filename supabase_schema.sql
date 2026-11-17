@@ -508,13 +508,21 @@ CREATE POLICY "Allow admins to manage closings" ON monthly_closings
 CREATE POLICY "Allow read access to notifications in same mess" ON notifications
     FOR SELECT USING (
         mess_id = public.get_my_mess_id()
-        AND (target_user_id IS NULL OR target_user_id = auth.uid())
+        AND (
+            target_user_id IS NULL
+            OR target_user_id = auth.uid()
+            OR public.get_my_role() IN ('Admin', 'Meal Manager')
+        )
     );
 
 CREATE POLICY "Allow updating notification read status" ON notifications
     FOR UPDATE USING (
         mess_id = public.get_my_mess_id()
-        AND (target_user_id IS NULL OR target_user_id = auth.uid())
+        AND (
+            target_user_id IS NULL
+            OR target_user_id = auth.uid()
+            OR public.get_my_role() IN ('Admin', 'Meal Manager')
+        )
     );
 
 CREATE POLICY "Allow inserting notifications in same mess" ON notifications

@@ -27,7 +27,9 @@ import {
   formatMonthLabel,
   formatDateDisplay,
   getEffectiveDatesForMonth,
-  getMonthPickerOptions
+  getMonthPickerOptions,
+  parseLockHourMinute,
+  formatTime12hDisplay
 } from '../utils/dateUtils';
 
 interface MealSheetTabProps {
@@ -193,12 +195,12 @@ export default function MealSheetTab({
       if (settings.lockOverride) return { locked: false }; // Manager override is active
 
       const now = new Date();
-      const [lockHour, lockMinute] = settings.mealLockTime.split(':').map(Number);
+      const { hour: lockHour, minute: lockMinute } = parseLockHourMinute(settings.mealLockTime);
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
 
       if (currentHour > lockHour || (currentHour === lockHour && currentMinute >= lockMinute)) {
-        return { locked: true, reason: `Locked at ${settings.mealLockTime} (Lock time passed)` };
+        return { locked: true, reason: `Locked at ${formatTime12hDisplay(settings.mealLockTime)} (Lock time passed)` };
       }
     }
 
@@ -1219,11 +1221,11 @@ export default function MealSheetTab({
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
                   {isBangla ? (
                     <>
-                      প্রতিদিন <span className="font-bold text-emerald-600 dark:text-emerald-400">{settings.mealLockTime}</span>-এর পর মেম্বাররা পরের দিনের মিল পরিবর্তন করতে পারবেন না।
+                      প্রতিদিন <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatTime12hDisplay(settings.mealLockTime)}</span>-এর পর মেম্বাররা পরের দিনের মিল পরিবর্তন করতে পারবেন না।
                     </>
                   ) : (
                     <>
-                      Daily cutoff is <span className="font-bold text-emerald-600 dark:text-emerald-400">{settings.mealLockTime}</span>. Members cannot change tomorrow&apos;s meals after this time.
+                      Daily cutoff is <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatTime12hDisplay(settings.mealLockTime)}</span>. Members cannot change tomorrow&apos;s meals after this time.
                     </>
                   )}
                 </p>
@@ -1268,8 +1270,8 @@ export default function MealSheetTab({
                                 ? 'দৈনিক সময়সীমা শেষ হয়েছে। এখন শুধু ম্যানেজার বা অ্যাডমিন পরিবর্তন করতে পারবেন।'
                                 : 'Daily cutoff has passed. Only managers or admins can adjust tomorrow’s meals.')
                             : (isBangla
-                                ? `আজ রাত/সন্ধ্যা ${settings.mealLockTime} পর্যন্ত মেম্বাররা মিল পরিবর্তন করতে পারবেন।`
-                                : `Members can still update tomorrow’s meals until ${settings.mealLockTime} today.`)}
+                                ? `আজ ${formatTime12hDisplay(settings.mealLockTime)} পর্যন্ত মেম্বাররা মিল পরিবর্তন করতে পারবেন।`
+                                : `Members can still update tomorrow’s meals until ${formatTime12hDisplay(settings.mealLockTime)} today.`)}
                       </p>
                     </div>
                   </div>

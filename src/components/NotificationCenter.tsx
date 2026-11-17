@@ -71,9 +71,17 @@ export default function NotificationCenter({
   const [depositTarget, setDepositTarget] = useState<string>('all');
   const [customDepositNote, setCustomDepositNote] = useState<string>('');
 
+  const isPowerUser = currentUser.role === 'Admin' || currentUser.role === 'Meal Manager';
+
   useEffect(() => {
     setBazaarDate(tomorrow);
   }, [tomorrow]);
+
+  useEffect(() => {
+    if (!isPowerUser && activeTab !== 'list') {
+      setActiveTab('list');
+    }
+  }, [isPowerUser, activeTab]);
 
   // Filter notifications relevant to current user
   // (Broadcasts, or specifically targeted to this user)
@@ -182,8 +190,6 @@ export default function NotificationCenter({
   };
 
   if (!isOpen) return null;
-
-  const isPowerUser = currentUser.role === 'Admin' || currentUser.role === 'Meal Manager';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end overflow-hidden" id="notification-center-drawer">

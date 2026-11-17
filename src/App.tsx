@@ -34,7 +34,8 @@ import {
   getMonthDates,
   getNextMonth,
   formatMonthLabel,
-  getEffectiveDatesForMonth
+  getEffectiveDatesForMonth,
+  formatTime12hDisplay
 } from './utils/dateUtils';
 
 // Dummy initial data
@@ -605,6 +606,9 @@ export default function App() {
           .select('*')
           .order('timestamp', { ascending: false })
           .limit(100);
+        if (notifsErr) {
+          console.error("Error fetching notifications from Supabase:", notifsErr);
+        }
         if (dbNotifs && !notifsErr && isMounted) {
           const mappedNotifs: AppNotification[] = dbNotifs.map(n => ({
             id: String(n.id),
@@ -617,7 +621,17 @@ export default function App() {
             linkToTab: n.link_to_tab || undefined,
             timestamp: n.timestamp,
           }));
-          setNotifications(mappedNotifs);
+          setNotifications(prev => {
+            const pendingLocal = prev.filter(n => String(n.id).startsWith('notif-'));
+            if (pendingLocal.length === 0) return mappedNotifs;
+            const syncedKeys = new Set(
+              mappedNotifs.map(n => `${n.type}|${n.title}|${n.targetUserId || ''}|${n.date}`)
+            );
+            const stillPending = pendingLocal.filter(
+              n => !syncedKeys.has(`${n.type}|${n.title}|${n.targetUserId || ''}|${n.date}`)
+            );
+            return [...stillPending, ...mappedNotifs];
+          });
         }
       } catch (err) {
         console.error("Error in syncAllDataFromSupabase:", err);
@@ -641,6 +655,13 @@ export default function App() {
       })
       .subscribe();
 
+    // Periodic fallback sync while tab is visible (in case Realtime WebSocket drops)
+    const fallbackInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        syncAllDataFromSupabase();
+      }
+    }, 15000);
+
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
         syncAllDataFromSupabase();
@@ -652,6 +673,7 @@ export default function App() {
     return () => {
       isMounted = false;
       if (syncTimer) clearTimeout(syncTimer);
+      clearInterval(fallbackInterval);
       window.removeEventListener('focus', handleVisibilityOrFocus);
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       supabase.removeChannel(channel);
@@ -1217,7 +1239,7 @@ export default function App() {
         handleAddNotification(
           'MealReminder',
           `Daily Mess Meal Sheet Alert`,
-          `Hi ${u.name}, tomorrow's meal reservations will lock at 10:00 PM. Please verify your breakfast, lunch, and dinner preferences.`,
+          `Hi ${u.name}, tomorrow's meal reservations will lock at ${formatTime12hDisplay(settings.mealLockTime)}. Please verify your breakfast, lunch, and dinner preferences.`,
           u.id,
           'MealSheet'
         );
@@ -2870,17 +2892,26 @@ export default function App() {
             </div>
 
             {/* Notification Bell with Badge */}
-            <button
-              onClick={() => setNotificationCenterOpen(true)}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition relative"
-              title="Open Notification Center"
-              id="notification-bell-btn"
-            >
-              <Bell size={18} />
-              {notifications.filter(n => (!n.targetUserId || n.targetUserId === currentUser.id) && !n.isRead).length > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />
-              )}
-            </button>
+            {(() => {
+              const unreadNotifCount = notifications.filter(
+                n => (!n.targetUserId || n.targetUserId === currentUser.id) && !n.isRead
+              ).length;
+              return (
+                <button
+                  onClick={() => setNotificationCenterOpen(true)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition relative"
+                  title="Open Notification Center"
+                  id="notification-bell-btn"
+                >
+                  <Bell size={18} />
+                  {unreadNotifCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold leading-none flex items-center justify-center ring-2 ring-white dark:ring-slate-900">
+                      {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
 
             {/* Persona Display avatar */}
             <div className="flex items-center gap-2.5">

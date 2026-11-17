@@ -166,3 +166,46 @@ export function getWeekRangesForMonth(monthStr: string, isBangla: boolean = fals
     };
   });
 }
+
+export function parseLockHourMinute(timeStr: string = '22:00'): { hour: number; minute: number } {
+  const clean = (timeStr || '22:00').trim().toUpperCase();
+  const amPmMatch = clean.match(/^(\d{1,2}):(\d{1,2})\s*(AM|PM)$/);
+  if (amPmMatch) {
+    let h = Number(amPmMatch[1]);
+    const m = Math.min(59, Math.max(0, Number(amPmMatch[2]) || 0));
+    const period = amPmMatch[3];
+    if (period === 'AM') {
+      if (h === 12) h = 0;
+    } else {
+      if (h !== 12) h += 12;
+    }
+    return { hour: Math.min(23, Math.max(0, h)), minute: m };
+  }
+  const [rawH, rawM] = clean.split(':').map(Number);
+  const hour = !isNaN(rawH) ? Math.min(23, Math.max(0, rawH)) : 22;
+  const minute = !isNaN(rawM) ? Math.min(59, Math.max(0, rawM)) : 0;
+  return { hour, minute };
+}
+
+export function parseTime24To12(timeStr: string = '22:00'): { hour12: number; minute: number; period: 'AM' | 'PM' } {
+  const { hour, minute } = parseLockHourMinute(timeStr);
+  const period: 'AM' | 'PM' = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return { hour12, minute, period };
+}
+
+export function formatTime12To24(hour12: number, minute: number, period: 'AM' | 'PM'): string {
+  let h = Math.min(12, Math.max(1, hour12));
+  const m = Math.min(59, Math.max(0, minute));
+  if (period === 'AM') {
+    if (h === 12) h = 0;
+  } else {
+    if (h !== 12) h += 12;
+  }
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export function formatTime12hDisplay(timeStr: string = '22:00'): string {
+  const { hour12, minute, period } = parseTime24To12(timeStr);
+  return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
