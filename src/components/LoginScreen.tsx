@@ -27,6 +27,7 @@ interface LoginScreenProps {
   onClearInitialError?: () => void;
   onPasswordResetSuccess?: () => void | Promise<void>;
   onCancelPasswordRecovery?: () => void | Promise<void>;
+  onStartRecoverySession?: (active: boolean) => void;
 }
 
 const translations = {
@@ -106,8 +107,11 @@ export default function LoginScreen({
   onClearInitialError,
   onPasswordResetSuccess,
   onCancelPasswordRecovery,
+  onStartRecoverySession,
 }: LoginScreenProps) {
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'forgot' | 'adminInit'>('login');
+  const [recoveryLinkInput, setRecoveryLinkInput] = useState('');
+  const [showLinkPasteHelper, setShowLinkPasteHelper] = useState(false);
   
   // Form Inputs
   const [email, setEmail] = useState('');
@@ -261,10 +265,13 @@ export default function LoginScreen({
 
     try {
       if (isSupabaseConfigured) {
+        const configuredSiteUrl = (import.meta.env.VITE_PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
+        const redirectToUrl = configuredSiteUrl || window.location.origin;
         const { data, error: authError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
+            emailRedirectTo: redirectToUrl,
             data: {
               name: fullName.trim(),
               phone: phone.trim(),
@@ -320,12 +327,15 @@ export default function LoginScreen({
 
     try {
       if (isSupabaseConfigured) {
+        const configuredSiteUrl = (import.meta.env.VITE_PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
+        const redirectToUrl = configuredSiteUrl || window.location.origin;
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: window.location.origin,
+          redirectTo: redirectToUrl,
         });
 
         if (!resetError) {
           setSuccess(t.successResetEmail);
+          setShowLinkPasteHelper(true);
           return;
         }
 
@@ -340,6 +350,70 @@ export default function LoginScreen({
       );
     } catch (err: any) {
       setError(parseErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fallback: Verify pasted recovery link directly (helpful if Supabase sent localhost URL)
+  const handleApplyPastedRecoveryLink = async () => {
+    const raw = recoveryLinkInput.trim();
+    if (!raw) return;
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const parsed = new URL(raw);
+      const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+      const searchParams = parsed.searchParams;
+
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const tokenHash = hashParams.get('token_hash') || searchParams.get('token_hash');
+      const linkType = hashParams.get('type') || searchParams.get('type') || 'recovery';
+
+      if (accessToken && refreshToken) {
+        onStartRecoverySession?.(true);
+        const { error: sessionErr } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionErr) {
+          onStartRecoverySession?.(false);
+          setError(parseErrorMessage(sessionErr));
+          return;
+        }
+        setRecoveryLinkInput('');
+        return;
+      }
+
+      if (tokenHash && linkType === 'recovery') {
+        onStartRecoverySession?.(true);
+        const { error: otpErr } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'recovery',
+        });
+        if (otpErr) {
+          onStartRecoverySession?.(false);
+          setError(parseErrorMessage(otpErr));
+          return;
+        }
+        setRecoveryLinkInput('');
+        return;
+      }
+
+      setError(
+        language === 'Bangla'
+          ? 'লিংকটি সঠিক নয় বা মেয়াদ শেষ হয়ে গেছে। নতুন রিসেট লিংক পাঠিয়ে আবার চেষ্টা করুন।'
+          : 'Invalid or expired recovery link. Please request a fresh reset email.'
+      );
+    } catch {
+      setError(
+        language === 'Bangla'
+          ? 'সম্পূর্ণ রিসেট লিংকটি (http:// সহ) পেস্ট করুন।'
+          : 'Please paste the complete recovery URL starting with http:// or https://.'
+      );
     } finally {
       setLoading(false);
     }
@@ -908,7 +982,48 @@ export default function LoginScreen({
               {!loading && <ArrowRight size={16} />}
             </button>
 
-            <div className="text-center pt-3">
+            {isSupabaseConfigured && (
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowLinkPasteHelper(v => !v)}
+                  className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer block mx-auto"
+                >
+                  {language === 'Bangla'
+                    ? 'ইমেইলের লিংকে localhost দেখাচ্ছে? এখানে লিংক পেস্ট করে পাসওয়ার্ড রিসেট করুন'
+                    : 'Got a localhost link in email? Paste the link here to reset password'}
+                </button>
+
+                {showLinkPasteHelper && (
+                  <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {language === 'Bangla'
+                        ? 'Gmail-এ আসা বাটনের লিংকটি কপি করে এখানে পেস্ট করুন:'
+                        : 'Copy the reset link URL from your email and paste it below:'}
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={recoveryLinkInput}
+                        onChange={(e) => setRecoveryLinkInput(e.target.value)}
+                        placeholder="http://localhost:3000/#access_token=..."
+                        className="flex-1 px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={loading || !recoveryLinkInput.trim()}
+                        onClick={handleApplyPastedRecoveryLink}
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition cursor-pointer shrink-0"
+                      >
+                        {language === 'Bangla' ? 'যাচাই করুন' : 'Verify'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="text-center pt-1">
               <button
                 type="button"
                 onClick={() => handleTabChange('login')}

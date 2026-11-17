@@ -1406,6 +1406,10 @@ export default function App() {
               await supabase.auth.signOut();
             }
           }}
+          onStartRecoverySession={(active) => {
+            isRecoveryRef.current = active;
+            setIsPasswordRecovery(active);
+          }}
         />
       </div>
     );
