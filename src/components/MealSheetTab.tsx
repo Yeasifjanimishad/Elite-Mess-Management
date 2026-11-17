@@ -9,12 +9,25 @@ import {
   Minus,
   Save,
   Lock,
+  Unlock,
+  Plane,
+  AlertCircle,
+  Info,
   CalendarDays,
   FileSpreadsheet,
   Search
 } from 'lucide-react';
 import { User, MemberMealSheet, MealStatus, SystemSettings, VacationPeriod } from '../types';
 import { useFeedback } from './FeedbackContext';
+import {
+  getRealCurrentMonth,
+  getDaysInMonth,
+  getMonthDates,
+  formatMonthLabel,
+  formatDateDisplay,
+  getEffectiveDatesForMonth,
+  getMonthPickerOptions
+} from '../utils/dateUtils';
 
 interface MealSheetTabProps {
   currentUser: User;
@@ -50,22 +63,25 @@ export default function MealSheetTab({
 
   const isManagerOrAdmin = role === 'Admin' || role === 'Meal Manager';
   const isBangla = settings.language === 'Bangla';
-  const [selectedMonth, setSelectedMonth] = useState('2026-07');
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+  const { today, tomorrow } = getEffectiveDatesForMonth(activeMonth);
+  const [selectedMonth, setSelectedMonth] = useState(activeMonth);
   const [searchQuery, setSearchQuery] = useState('');
   const [focusedCell, setFocusedCell] = useState<{ userId: string; date: string } | null>(null);
 
-  const getDaysInMonth = (monthStr: string) => {
-    const [year, month] = monthStr.split('-').map(Number);
-    return new Date(year, month, 0).getDate();
-  };
+  React.useEffect(() => {
+    setSelectedMonth(activeMonth);
+  }, [activeMonth]);
 
   const daysInMonth = getDaysInMonth(selectedMonth);
-  
-  // Generating list of date strings for selected month
-  const dates = Array.from({ length: daysInMonth }, (_, i) => {
-    const dayNum = i + 1;
-    return `${selectedMonth}-${dayNum < 10 ? '0' + dayNum : dayNum}`;
-  });
+  const dates = getMonthDates(selectedMonth);
+  const monthOptions = getMonthPickerOptions(
+    activeMonth,
+    [
+      selectedMonth,
+      ...(settings.closedMonths?.map(c => c.month) || [])
+    ]
+  );
 
   // Cell Editing state
   const [editingCell, setEditingCell] = useState<{
@@ -77,20 +93,24 @@ export default function MealSheetTab({
   } | null>(null);
 
   // Vacation states
-  const [vacationStart, setVacationStart] = useState(`${selectedMonth}-19`);
-  const [vacationEnd, setVacationEnd] = useState(`${selectedMonth}-25`);
+  const defaultVacStartDay = today.startsWith(selectedMonth) ? today.split('-')[2] : '01';
+  const defaultVacEndNum = Math.min(Number(defaultVacStartDay) + 6, daysInMonth);
+  const [vacationStart, setVacationStart] = useState(`${selectedMonth}-${defaultVacStartDay}`);
+  const [vacationEnd, setVacationEnd] = useState(`${selectedMonth}-${String(defaultVacEndNum).padStart(2, '0')}`);
   const [vacationUser, setVacationUser] = useState(currentUser.id);
   const [vacationError, setVacationError] = useState('');
   const [editingVacationId, setEditingVacationId] = useState<string | null>(null);
 
   // Update vacation defaults when month or currentUser changes
   React.useEffect(() => {
-    setVacationStart(`${selectedMonth}-19`);
-    setVacationEnd(`${selectedMonth}-25`);
+    const startDay = today.startsWith(selectedMonth) ? today.split('-')[2] : '01';
+    const endDay = Math.min(Number(startDay) + 6, getDaysInMonth(selectedMonth));
+    setVacationStart(`${selectedMonth}-${startDay}`);
+    setVacationEnd(`${selectedMonth}-${String(endDay).padStart(2, '0')}`);
     if (!editingVacationId) {
       setVacationUser(currentUser.id);
     }
-  }, [selectedMonth, currentUser.id, editingVacationId]);
+  }, [selectedMonth, currentUser.id, editingVacationId, today]);
 
   const handleEditVacationClick = (vp: VacationPeriod) => {
     setEditingVacationId(vp.id);
@@ -159,14 +179,15 @@ export default function MealSheetTab({
   // Lock status check for a member
   const checkIsLockedForMember = (date: string): { locked: boolean; reason?: string } => {
     if (isManagerOrAdmin) return { locked: false };
-    if (settings.isMonthClosed) return { locked: true, reason: 'Month is closed' };
+    if (settings.isMonthClosed && date.startsWith(activeMonth)) return { locked: true, reason: 'Month is closed' };
+    if (date.slice(0, 7) < activeMonth) return { locked: true, reason: 'Past month is locked' };
 
     // Members cannot edit past dates or today
-    if (date <= '2026-07-18') {
+    if (date <= today) {
       return { locked: true, reason: 'Past and today\'s meals cannot be modified by members' };
     }
 
-    const isTomorrow = date === '2026-07-19';
+    const isTomorrow = date === tomorrow;
     if (isTomorrow) {
       if (settings.lockOverride) return { locked: false }; // Manager override is active
 
@@ -190,7 +211,7 @@ export default function MealSheetTab({
     const dayMeal = isUserVacationActive 
       ? { breakfast: false, lunch: false, dinner: false, guestBreakfast: 0, guestLunch: 0, guestDinner: 0 }
       : (sheet.meals[date] || {
-          breakfast: true, lunch: true, dinner: true,
+          breakfast: false, lunch: false, dinner: false,
           guestBreakfast: 0, guestLunch: 0, guestDinner: 0
         });
 
@@ -248,7 +269,7 @@ export default function MealSheetTab({
         return; // skip meals, they are OFF automatically during vacation
       }
       const m = sheet.meals[date] || {
-        breakfast: true, lunch: true, dinner: true,
+        breakfast: false, lunch: false, dinner: false,
         guestBreakfast: 0, guestLunch: 0, guestDinner: 0
       };
       // breakfast = 0.5 meal, lunch = 1, dinner = 1
@@ -274,7 +295,7 @@ export default function MealSheetTab({
     visibleMeals.forEach(sheet => {
       if (isVacation(sheet.userId, dateStr)) return;
       const m = sheet.meals[dateStr] || {
-        breakfast: true, lunch: true, dinner: true,
+        breakfast: false, lunch: false, dinner: false,
         guestBreakfast: 0, guestLunch: 0, guestDinner: 0
       };
       ownTotal += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
@@ -371,7 +392,7 @@ export default function MealSheetTab({
     const dayMeal = isVacation(sheet.userId, date)
       ? { breakfast: false, lunch: false, dinner: false, guestBreakfast: 0, guestLunch: 0, guestDinner: 0 }
       : (sheet.meals[date] || {
-          breakfast: true, lunch: true, dinner: true,
+          breakfast: false, lunch: false, dinner: false,
           guestBreakfast: 0, guestLunch: 0, guestDinner: 0
         });
 
@@ -413,7 +434,7 @@ export default function MealSheetTab({
     // Dynamic logging for audit logs
     const targetSheet = meals.find(sheet => sheet.userId === editingCell.userId);
     const oldDayMeal = targetSheet?.meals[editingCell.date] || {
-      breakfast: true, lunch: true, dinner: true,
+      breakfast: false, lunch: false, dinner: false,
       guestBreakfast: 0, guestLunch: 0, guestDinner: 0
     };
 
@@ -462,7 +483,7 @@ export default function MealSheetTab({
         <div>
           <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <FileSpreadsheet className="text-emerald-600 dark:text-emerald-400" size={22} />
-            Digital Meal Sheet ({selectedMonth === '2026-06' ? 'June 2026' : selectedMonth === '2026-07' ? 'July 2026' : selectedMonth === '2026-08' ? 'August 2026' : selectedMonth})
+            Digital Meal Sheet ({formatMonthLabel(selectedMonth, settings.language)})
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {isManagerOrAdmin 
@@ -508,15 +529,17 @@ export default function MealSheetTab({
           </div>
 
           {/* Month selector */}
-          <div className="relative w-full sm:w-48">
+          <div className="relative w-full sm:w-52">
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-white font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
-              <option value="2026-06">June 2026</option>
-              <option value="2026-07">July 2026</option>
-              <option value="2026-08">August 2026</option>
+              {monthOptions.map(m => (
+                <option key={m} value={m}>
+                  {formatMonthLabel(m, settings.language)}{m === activeMonth ? (isBangla ? ' (সক্রিয়)' : ' (Active)') : ''}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -546,7 +569,7 @@ export default function MealSheetTab({
               {/* Sticky Dates Columns */}
               {dates.map((date, index) => {
                 const dayNum = index + 1;
-                const isToday = date === `${selectedMonth}-18` || (selectedMonth === '2026-07' && dayNum === 18);
+                const isToday = date === today;
                 return (
                   <th 
                     key={date} 
@@ -596,9 +619,9 @@ export default function MealSheetTab({
                     {/* Dates cells */}
                     {dates.map((date) => {
                       const { cellLabel, bgColorClass, textColorClass, dayMeal, isLocked } = getCellData(sheet, date);
-                      const isToday = date === '2026-07-18';
+                      const isToday = date === today;
                       const isCellFocused = focusedCell && focusedCell.userId === sheet.userId && focusedCell.date === date;
-                      const canEdit = isManagerOrAdmin || (sheet.userId === currentUser.id && date >= '2026-07-19');
+                      const canEdit = isManagerOrAdmin || (sheet.userId === currentUser.id && !checkIsLockedForMember(date).locked);
 
                       return (
                         <td 
@@ -612,7 +635,7 @@ export default function MealSheetTab({
                           {/* Elegant Hover Breakdown Tooltip */}
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-950 text-slate-200 text-[10px] rounded-lg p-2.5 opacity-0 pointer-events-none group-hover/cell:opacity-100 transition-opacity duration-200 z-50 shadow-xl border border-slate-800">
                             <p className="font-bold border-b border-slate-800 pb-1 mb-1.5 text-white flex justify-between">
-                              <span>{selectedMonth === '2026-06' ? 'June' : selectedMonth === '2026-07' ? 'July' : selectedMonth === '2026-08' ? 'August' : 'Selected'} {date.split('-')[2]}</span>
+                              <span>{formatMonthLabel(selectedMonth, settings.language)} {date.split('-')[2]}</span>
                               {isLocked && <Lock size={10} className="text-slate-400" />}
                             </p>
                             <div className="grid grid-cols-2 gap-y-1 text-[10px]">
@@ -665,7 +688,7 @@ export default function MealSheetTab({
                 {/* Dynamically calculated daily totals columns */}
                 {dates.map((date) => {
                   const colTotals = calculateDailyColumnTotals(date);
-                  const isToday = date === '2026-07-18';
+                  const isToday = date === today;
                   return (
                     <td 
                       key={`foot-${date}`}
@@ -946,121 +969,180 @@ export default function MealSheetTab({
 
       {/* MEAL LOCK OVERRIDES AND VACATION MANAGEMENT PANELS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        
-        {/* PANEL 1: VACATION MODE SYSTEM */}
-        <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-150 dark:border-slate-850 p-5 rounded-2xl space-y-4 shadow-xs" id="vacation-panel">
-          <div>
-            <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
-              <CalendarDays className="text-sky-500" size={18} />
-              Vacation Mode Planner
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Add vacation days. All meals during this range become OFF automatically, and original schedule resumes after.
-            </p>
-          </div>
 
-          {/* VACATION MODE ENTRY FORM */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 p-4 rounded-xl space-y-3">
-            <h4 className="text-[10px] font-bold text-slate-550 dark:text-slate-350 uppercase tracking-wider">
-              {editingVacationId ? (isBangla ? 'ছুটি আপডেট করুন' : 'Edit Vacation Sabbatical') : (isBangla ? 'নতুন ছুটি নির্ধারণ' : 'Schedule New Vacation')}
-            </h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Start Date</label>
-                <input
-                  type="date"
-                  min="2026-07-01"
-                  max="2026-07-31"
-                  value={vacationStart}
-                  onChange={(e) => setVacationStart(e.target.value)}
-                  className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-semibold"
-                />
+        {/* PANEL 1: VACATION MODE SYSTEM */}
+        <div
+          id="vacation-panel"
+          className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between gap-5"
+        >
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-500/12 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
+                <Plane size={19} />
               </div>
               <div>
-                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">End Date</label>
-                <input
-                  type="date"
-                  min="2026-07-01"
-                  max="2026-07-31"
-                  value={vacationEnd}
-                  onChange={(e) => setVacationEnd(e.target.value)}
-                  className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-semibold"
-                />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
+                  {isBangla ? 'ছুটি ও মিল বন্ধ প্ল্যানার' : 'Vacation Planner'}
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+                  {isBangla
+                    ? 'নির্দিষ্ট তারিখের জন্য মিল অটো বন্ধ রাখুন। ছুটি শেষে আগের শিডিউল আবার চালু হবে।'
+                    : 'Pause all meals for selected dates. Your regular schedule resumes automatically afterward.'}
+                </p>
               </div>
             </div>
 
-            {isManagerOrAdmin && (
-              <div>
-                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Apply to Member</label>
-                <select
-                  value={vacationUser}
-                  onChange={(e) => setVacationUser(e.target.value)}
-                  className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-semibold"
-                >
-                  {allUsers.filter(u => u.isActive).map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
+            {/* VACATION MODE ENTRY FORM */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-xl space-y-3.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <CalendarDays size={14} className="text-sky-500" />
+                  <span>
+                    {editingVacationId
+                      ? (isBangla ? 'ছুটির তারিখ পরিবর্তন করুন' : 'Edit Vacation Dates')
+                      : (isBangla ? 'নতুন ছুটি যোগ করুন' : 'Schedule Vacation')}
+                  </span>
+                </h4>
+                {editingVacationId && (
+                  <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                    {isBangla ? 'এডিট মোড' : 'Editing'}
+                  </span>
+                )}
               </div>
-            )}
 
-            {vacationError && (
-              <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1">
-                ⚠️ {vacationError}
-              </p>
-            )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    {isBangla ? 'শুরুর তারিখ' : 'Start Date'}
+                  </label>
+                  <input
+                    type="date"
+                    min={`${selectedMonth}-01`}
+                    max={`${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`}
+                    value={vacationStart}
+                    onChange={(e) => setVacationStart(e.target.value)}
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/25 focus:border-sky-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    {isBangla ? 'শেষ তারিখ' : 'End Date'}
+                  </label>
+                  <input
+                    type="date"
+                    min={`${selectedMonth}-01`}
+                    max={`${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`}
+                    value={vacationEnd}
+                    onChange={(e) => setVacationEnd(e.target.value)}
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/25 focus:border-sky-500"
+                  />
+                </div>
+              </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={handleCreateVacation}
-                className="flex-1 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
-              >
-                {editingVacationId ? (isBangla ? 'ছুটি আপডেট করুন' : 'Update Vacation') : (isBangla ? 'ছুটি নিশ্চিত করুন' : 'Set Vacation Mode')}
-              </button>
-              {editingVacationId && (
-                <button
-                  onClick={handleCancelEditVacation}
-                  className="py-2 px-3 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold transition"
-                >
-                  {isBangla ? 'বাতিল' : 'Cancel Edit'}
-                </button>
+              {isManagerOrAdmin && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    {isBangla ? 'মেম্বার নির্বাচন করুন' : 'Member'}
+                  </label>
+                  <select
+                    value={vacationUser}
+                    onChange={(e) => setVacationUser(e.target.value)}
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/25 focus:border-sky-500 cursor-pointer"
+                  >
+                    {allUsers.filter(u => u.isActive).map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
               )}
+
+              {vacationError && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{vacationError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={handleCreateVacation}
+                  className="flex-1 min-h-[38px] py-2 px-4 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                >
+                  {editingVacationId
+                    ? (isBangla ? 'ছুটি আপডেট করুন' : 'Update Vacation')
+                    : (isBangla ? 'ছুটি নিশ্চিত করুন' : 'Set Vacation Mode')}
+                </button>
+                {editingVacationId && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEditVacation}
+                    className="min-h-[38px] py-2 px-3.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    {isBangla ? 'বাতিল' : 'Cancel Edit'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
           {/* ACTIVE VACATIONS LIST */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Registered Vacation Sabbaticals ({visibleVacations.length})
-            </h4>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                {isBangla
+                  ? `নির্ধারিত ছুটি (${visibleVacations.length})`
+                  : `Planned Vacations (${visibleVacations.length})`}
+              </h4>
+            </div>
+
             {visibleVacations.length === 0 ? (
-              <p className="text-xs text-slate-400 italic py-1 text-center">No active vacations planned for this month.</p>
+              <div className="bg-white/70 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-700/80 rounded-xl py-4 px-3 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {isBangla
+                    ? 'এই মাসে এখনো কোনো ছুটি যোগ করা হয়নি।'
+                    : 'No vacations scheduled for this month.'}
+                </p>
+              </div>
             ) : (
-              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+              <div className="max-h-40 overflow-y-auto space-y-2 pr-0.5">
                 {visibleVacations.map(vp => {
                   const targetUser = allUsers.find(x => x.id === vp.userId);
+                  const dayCount = Math.max(
+                    1,
+                    Math.round((new Date(vp.endDate).getTime() - new Date(vp.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
+                  );
                   return (
-                    <div key={vp.id} className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-3 py-2 rounded-xl text-xs">
-                      <div>
-                        <p className="font-bold text-slate-850 dark:text-white">
-                          {isManagerOrAdmin ? targetUser?.name : 'My Sabbatical'}
+                    <div
+                      key={vp.id}
+                      className="flex justify-between items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 px-3.5 py-2.5 rounded-xl text-xs shadow-2xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 dark:text-white truncate">
+                          {isManagerOrAdmin
+                            ? targetUser?.name
+                            : (isBangla ? 'আমার ছুটি' : 'My Vacation')}
                         </p>
-                        <p className="text-[10px] text-slate-400">
-                          {vp.startDate} to {vp.endDate}
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                          {formatDateDisplay(vp.startDate, settings.language)} – {formatDateDisplay(vp.endDate, settings.language)}
+                          <span className="text-slate-400 dark:text-slate-500"> · {dayCount} {isBangla ? 'দিন' : dayCount === 1 ? 'day' : 'days'}</span>
                         </p>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
+                          type="button"
                           onClick={() => handleEditVacationClick(vp)}
-                          className="text-[10px] font-bold text-sky-600 hover:text-sky-800 px-2 py-1 hover:bg-sky-50 dark:hover:bg-sky-950/20 rounded-lg transition"
+                          className="text-xs font-semibold text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/30 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
                         >
-                          Edit
+                          {isBangla ? 'এডিট' : 'Edit'}
                         </button>
                         <button
+                          type="button"
                           onClick={() => onCancelVacation(vp.id)}
-                          className="text-[10px] font-bold text-rose-600 hover:text-rose-800 px-2 py-1 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition"
+                          className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
                         >
-                          Cancel
+                          {isBangla ? 'বাতিল' : 'Cancel'}
                         </button>
                       </div>
                     </div>
@@ -1072,71 +1154,134 @@ export default function MealSheetTab({
         </div>
 
         {/* PANEL 2: MEAL LOCK CONFIG & OVERRIDES */}
-        <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-150 dark:border-slate-850 p-5 rounded-2xl flex flex-col justify-between shadow-xs">
+        <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between gap-5">
           <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
-                <Lock className="text-amber-500" size={18} />
-                Meal Lock & Emergency Override
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Configured Lock Time: <span className="font-bold text-emerald-600 dark:text-emerald-450">{settings.mealLockTime}</span>. Standard members cannot edit tomorrow's meals after this deadline.
-              </p>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/85 p-4 rounded-xl space-y-3">
-              <h4 className="text-[10px] font-bold text-slate-550 dark:text-slate-350 uppercase tracking-wider">
-                Live Lock Status
-              </h4>
-              <div className="flex items-center gap-3">
-                <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                  settings.lockOverride 
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
-                    : checkIsLockedForMember('2026-07-19').locked
-                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/15'
-                      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
-                }`}>
-                  {settings.lockOverride ? '🔓 OVERRIDDEN' : checkIsLockedForMember('2026-07-19').locked ? '🔒 LOCKED' : '🔓 OPEN'}
-                </span>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  {settings.lockOverride 
-                    ? 'Managers have temporarily suspended the lock. Members can edit.' 
-                    : checkIsLockedForMember('2026-07-19').locked 
-                      ? 'Daily lock is in force. Only managers can make changes.' 
-                      : 'Standard lockout applies at ' + settings.mealLockTime + ' today.'}
+            {/* Header */}
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/12 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <Lock size={19} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
+                  {isBangla ? 'দৈনিক মিল লক ও ওভাররাইড' : 'Meal Lock & Override'}
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+                  {isBangla ? (
+                    <>
+                      প্রতিদিন <span className="font-bold text-emerald-600 dark:text-emerald-400">{settings.mealLockTime}</span>-এর পর মেম্বাররা পরের দিনের মিল পরিবর্তন করতে পারবেন না।
+                    </>
+                  ) : (
+                    <>
+                      Daily cutoff is <span className="font-bold text-emerald-600 dark:text-emerald-400">{settings.mealLockTime}</span>. Members cannot change tomorrow&apos;s meals after this time.
+                    </>
+                  )}
                 </p>
               </div>
-
-              {isManagerOrAdmin && (
-                <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3 mt-1.5 flex justify-between items-center">
-                  <div>
-                    <p className="text-xs font-bold text-slate-750 dark:text-slate-200">Bypass Lock for Members</p>
-                    <p className="text-[10px] text-slate-400">Allow standard members to bypass the lock time restriction.</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const updated = { ...settings, lockOverride: !settings.lockOverride };
-                      onUpdateSettings(updated);
-                      onLogAction('Lock Override Trigger', `Meal lock override ${!settings.lockOverride ? 'ENABLED' : 'DISABLED'} by Manager.`);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                      settings.lockOverride 
-                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm' 
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                    }`}
-                  >
-                    {settings.lockOverride ? 'Disable Override' : 'Enable Override'}
-                  </button>
-                </div>
-              )}
             </div>
+
+            {/* Live Lock Status Card */}
+            {(() => {
+              const tomorrowLocked = checkIsLockedForMember(tomorrow).locked;
+              const isUnlockedState = settings.lockOverride || !tomorrowLocked;
+
+              return (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-xl space-y-3.5 shadow-2xs">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        settings.lockOverride
+                          ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
+                          : tomorrowLocked
+                            ? 'bg-rose-500/12 text-rose-600 dark:text-rose-400'
+                            : 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
+                      }`}
+                    >
+                      {isUnlockedState ? <Unlock size={17} /> : <Lock size={17} />}
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">
+                        {settings.lockOverride
+                          ? (isBangla ? 'ওভাররাইড চালু (সবাই এডিট করতে পারবে)' : 'Override Active · Open for All')
+                          : tomorrowLocked
+                            ? (isBangla ? 'আজকের জন্য লক করা আছে' : 'Locked for Members')
+                            : (isBangla ? 'এডিটের জন্য খোলা আছে' : 'Open for Edits')}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                        {settings.lockOverride
+                          ? (isBangla
+                              ? 'ম্যানেজার সাময়িকভাবে সময়সীমা তুলে দিয়েছেন। মেম্বাররা এখন মিল পরিবর্তন করতে পারবে।'
+                              : 'Managers temporarily lifted the deadline so members can update tomorrow’s meals.')
+                          : tomorrowLocked
+                            ? (isBangla
+                                ? 'দৈনিক সময়সীমা শেষ হয়েছে। এখন শুধু ম্যানেজার বা অ্যাডমিন পরিবর্তন করতে পারবেন।'
+                                : 'Daily cutoff has passed. Only managers or admins can adjust tomorrow’s meals.')
+                            : (isBangla
+                                ? `আজ রাত/সন্ধ্যা ${settings.mealLockTime} পর্যন্ত মেম্বাররা মিল পরিবর্তন করতে পারবেন।`
+                                : `Members can still update tomorrow’s meals until ${settings.mealLockTime} today.`)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isManagerOrAdmin && (
+                    <div className="border-t border-slate-100 dark:border-slate-800 pt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                          {isBangla ? 'মেম্বারদের জন্য লক ওভাররাইড' : 'Bypass Lock for Members'}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          {isBangla
+                            ? 'সময়সীমা পার হলেও মেম্বারদের এডিট করার অনুমতি দিন।'
+                            : 'Allow members to edit tomorrow’s meals even after cutoff.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = { ...settings, lockOverride: !settings.lockOverride };
+                          onUpdateSettings(updated);
+                          onLogAction('Lock Override Trigger', `Meal lock override ${!settings.lockOverride ? 'ENABLED' : 'DISABLED'} by Manager.`);
+                        }}
+                        className={`min-h-[36px] px-3.5 py-2 rounded-xl text-xs font-bold transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
+                          settings.lockOverride
+                            ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                        }`}
+                      >
+                        {settings.lockOverride
+                          ? (isBangla ? 'ওভাররাইড বন্ধ করুন' : 'Disable Override')
+                          : (isBangla ? 'ওভাররাইড চালু করুন' : 'Enable Override')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
-          <div className="p-3 border border-slate-100 dark:border-slate-800/80 rounded-xl bg-white dark:bg-slate-900 mt-4 text-[11px] text-slate-400 space-y-1.5">
-            <span className="font-bold text-slate-550 dark:text-slate-350 block uppercase tracking-wider">💡 Operational Notes:</span>
-            <p>1. Default meals are automatically marked ON for all members daily.</p>
-            <p>2. Past dates cannot be modified by members under any circumstances.</p>
-            <p>3. Guest meals are included in each member's final monthly total counts.</p>
+          {/* Operational Notes Card */}
+          <div className="p-4 border border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 space-y-2 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+              <Info size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{isBangla ? 'গুরুত্বপূর্ণ নিয়মাবলী' : 'Quick Meal Rules'}</span>
+            </div>
+            <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5 list-disc pl-4 leading-relaxed">
+              <li>
+                {isBangla
+                  ? 'প্রতিদিন ডিফল্টভাবে মেম্বারদের মিল চালু (ON) থাকে।'
+                  : 'Default meals stay ON daily unless turned OFF or paused via Vacation.'}
+              </li>
+              <li>
+                {isBangla
+                  ? 'অতীত বা আজকের তারিখের মিল মেম্বাররা পরিবর্তন করতে পারবেন না।'
+                  : 'Past and today’s meals are locked for standard members.'}
+              </li>
+              <li>
+                {isBangla
+                  ? 'অতিথি (Guest) মিল মাসিক মোট মিলের সাথে যোগ হয়।'
+                  : 'Guest meals automatically count toward each member’s monthly total.'}
+              </li>
+            </ul>
           </div>
         </div>
 

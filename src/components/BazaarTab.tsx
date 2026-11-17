@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -23,6 +23,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserType, BazaarEntry, SystemSettings } from '../types';
 import { useFeedback } from './FeedbackContext';
+import { getRealCurrentMonth, getEffectiveDatesForMonth, formatMonthLabel, getMonthPickerOptions } from '../utils/dateUtils';
 
 interface BazaarTabProps {
   currentUser: UserType;
@@ -156,16 +157,18 @@ export default function BazaarTab({
 
   const { showToast, showConfirm } = useFeedback();
 
-  const handleTriggerReminderClick = () => {
-    if (onTriggerBazaarReminder) {
-      onTriggerBazaarReminder(assignedBazaarPersons, '2026-07-19');
-      showToast(isBangla ? 'বাজারের দায়িত্বের বিজ্ঞপ্তিটি সমস্ত নির্ধারিত সদস্যদের কাছে পাঠানো হয়েছে!' : 'Bazaar duty notification successfully transmitted to all assigned members!', 'success');
-    }
-  };
-
   const isManagerOrAdmin = role === 'Admin' || (role === 'Meal Manager' && settings.mgrCanApproveBazaar !== false);
   const isBangla = settings.language === 'Bangla';
   const t = translations[isBangla ? 'Bangla' : 'English'];
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+  const { today, tomorrow } = getEffectiveDatesForMonth(activeMonth);
+
+  const handleTriggerReminderClick = () => {
+    if (onTriggerBazaarReminder) {
+      onTriggerBazaarReminder(assignedBazaarPersons, tomorrow);
+      showToast(isBangla ? 'বাজারের দায়িত্বের বিজ্ঞপ্তিটি সমস্ত নির্ধারিত সদস্যদের কাছে পাঠানো হয়েছে!' : 'Bazaar duty notification successfully transmitted to all assigned members!', 'success');
+    }
+  };
 
   // Buyer Assignment Toggle State
   const [isEditingDuty, setIsEditingDuty] = useState(false);
@@ -176,15 +179,22 @@ export default function BazaarTab({
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
   
   // Extract unique months from existing entries dynamically to populate filter
-  const uniqueMonths = Array.from(new Set(bazaarEntries.map(b => b.date.substring(0, 7)))).sort().reverse();
-  const [monthFilter, setMonthFilter] = useState<string>('All');
+  const uniqueMonths = getMonthPickerOptions(activeMonth, [
+    ...bazaarEntries.map(b => b.date.substring(0, 7)),
+    ...(settings.closedMonths?.map(c => c.month) || [])
+  ]);
+  const [monthFilter, setMonthFilter] = useState<string>(activeMonth);
+
+  useEffect(() => {
+    setMonthFilter(activeMonth);
+  }, [activeMonth]);
 
   // Form Modals State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<BazaarEntry | null>(null);
 
   const [formData, setFormData] = useState({
-    date: '2026-07-18',
+    date: today,
     items: '',
     quantity: '',
     unit: 'kg',
@@ -193,6 +203,12 @@ export default function BazaarTab({
     notes: '',
     receiptUrl: ''
   });
+
+  useEffect(() => {
+    if (!editEntry) {
+      setFormData(prev => ({ ...prev, date: today }));
+    }
+  }, [today, editEntry]);
 
   // Receipt image zoom popup
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
@@ -207,7 +223,7 @@ export default function BazaarTab({
   const handleOpenAddModal = () => {
     setEditEntry(null);
     setFormData({
-      date: '2026-07-18',
+      date: today,
       items: '',
       quantity: '1',
       unit: 'kg',
@@ -564,7 +580,7 @@ export default function BazaarTab({
             <option value="All">{t.allMonths}</option>
             {uniqueMonths.map(m => (
               <option key={m} value={m}>
-                {isBangla ? `${m.substring(5)}/${m.substring(0, 4)}` : new Date(m + "-01").toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                {formatMonthLabel(m, settings.language)}{m === activeMonth ? (isBangla ? ' (চলতি)' : ' (Active)') : ''}
               </option>
             ))}
           </select>
