@@ -133,6 +133,7 @@ export interface SystemSettings {
   mgrCanAddExpense?: boolean;
   mgrCanManageUsers?: boolean;
   mgrCanPublishNotice?: boolean;
+  assignedBazaarPersons?: string[];
 }
 
 export interface VacationPeriod {

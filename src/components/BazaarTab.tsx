@@ -174,6 +174,16 @@ export default function BazaarTab({
   const [isEditingDuty, setIsEditingDuty] = useState(false);
   const [tempDuties, setTempDuties] = useState<string[]>(assignedBazaarPersons);
 
+  useEffect(() => {
+    if (!isEditingDuty) {
+      setTempDuties(assignedBazaarPersons.filter(id => allUsers.some(u => u.id === id)));
+    }
+  }, [assignedBazaarPersons, allUsers, isEditingDuty]);
+
+  const validAssignedBuyers = assignedBazaarPersons
+    .map(id => allUsers.find(u => u.id === id))
+    .filter((u): u is UserType => Boolean(u));
+
   // Search, Status, and Month Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
@@ -382,7 +392,7 @@ export default function BazaarTab({
                   </button>
                   <button
                     onClick={() => {
-                      setTempDuties(assignedBazaarPersons);
+                      setTempDuties(validAssignedBuyers.map(u => u.id));
                       setIsEditingDuty(true);
                     }}
                     className="px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 rounded-lg cursor-pointer transition"
@@ -414,21 +424,29 @@ export default function BazaarTab({
         <div className="mt-4">
           {!isEditingDuty ? (
             <div className="flex flex-wrap gap-2">
-              {assignedBazaarPersons.map(id => {
-                const buyer = allUsers.find(u => u.id === id);
-                if (!buyer) return null;
+              {validAssignedBuyers.map(buyer => {
+                const isSelf = buyer.id === currentUser.id;
                 return (
                   <div 
-                    key={id} 
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-400 rounded-xl text-xs font-bold"
+                    key={buyer.id} 
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border ${
+                      isSelf
+                        ? 'bg-emerald-100/80 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-300'
+                        : 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-400'
+                    }`}
                   >
                     <img src={buyer.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-4 h-4 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
-                    <span>{buyer.name}</span>
+                    <span>
+                      {buyer.name}
+                      {isSelf ? (isBangla ? ' (আপনি)' : ' (You)') : ''}
+                    </span>
                   </div>
                 );
               })}
-              {assignedBazaarPersons.length === 0 && (
-                <span className="text-xs font-medium text-slate-400">No buyers assigned. Please assign some.</span>
+              {validAssignedBuyers.length === 0 && (
+                <span className="text-xs font-medium text-slate-400">
+                  {isBangla ? 'বাজারের জন্য এখনো কোনো সদস্য নির্ধারিত হয়নি।' : 'No buyers assigned yet.'}
+                </span>
               )}
             </div>
           ) : (

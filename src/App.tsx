@@ -336,7 +336,7 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       } catch (e) {}
     }
     return ['u-3', 'u-5']; // Default Sajid and Nayeem
@@ -433,6 +433,14 @@ export default function App() {
           .limit(1)
           .maybeSingle();
         if (dbSettings && !settingsErr && isMounted) {
+          const syncedAssigned = Array.isArray(dbSettings.assigned_bazaar_persons)
+            ? dbSettings.assigned_bazaar_persons.filter((id: string) =>
+                mappedUsers.length === 0 || mappedUsers.some(u => u.id === id)
+              )
+            : undefined;
+          if (syncedAssigned !== undefined) {
+            setAssignedBazaarPersons(syncedAssigned);
+          }
           setSettings(prev => ({
             ...prev,
             systemName: dbSettings.system_name || prev.systemName,
@@ -451,6 +459,7 @@ export default function App() {
             mgrCanAddExpense: dbSettings.mgr_can_add_expense ?? prev.mgrCanAddExpense,
             mgrCanManageUsers: dbSettings.mgr_can_manage_users ?? prev.mgrCanManageUsers,
             mgrCanPublishNotice: dbSettings.mgr_can_publish_notice ?? prev.mgrCanPublishNotice,
+            assignedBazaarPersons: syncedAssigned ?? prev.assignedBazaarPersons,
           }));
         }
 
@@ -620,6 +629,33 @@ export default function App() {
             details: l.details,
           }));
           setActivityLogs(mappedLogs);
+
+          // Fallback sync for assigned bazaar persons if system_settings.assigned_bazaar_persons column is not yet migrated in live DB
+          if (!Array.isArray(dbSettings?.assigned_bazaar_persons) && mappedUsers.length > 0) {
+            const latestAssignLog = mappedLogs.find(
+              l =>
+                l.details.startsWith('Assigned bazaar duty to: ') ||
+                l.details === 'Cleared all assigned bazaar buyer duties'
+            );
+            if (latestAssignLog) {
+              if (latestAssignLog.details === 'Cleared all assigned bazaar buyer duties') {
+                setAssignedBazaarPersons([]);
+              } else {
+                const rawNames = latestAssignLog.details
+                  .replace('Assigned bazaar duty to: ', '')
+                  .split(',')
+                  .map(s => s.trim())
+                  .filter(Boolean);
+                const resolvedIds = mappedUsers
+                  .filter(u => rawNames.includes(u.name))
+                  .map(u => u.id);
+                setAssignedBazaarPersons(resolvedIds);
+              }
+            } else {
+              // Strip stale demo IDs (e.g. 'u-3', 'u-5') when connected to real Supabase UUID users
+              setAssignedBazaarPersons(prev => prev.filter(id => mappedUsers.some(u => u.id === id)));
+            }
+          }
         }
 
         // 10. Fetch Notifications
@@ -2370,6 +2406,7 @@ export default function App() {
         closed_months: nextSettings.closedMonths || [],
         lock_override: nextSettings.lockOverride ?? false,
         theme: nextSettings.theme || 'Light',
+        assigned_bazaar_persons: nextSettings.assignedBazaarPersons ?? assignedBazaarPersons,
       };
 
       const { error } = await supabase.from('system_settings').upsert(fullPayload, { onConflict: 'mess_id' });
@@ -2694,7 +2731,61 @@ export default function App() {
             onDeleteEntry={handleDeleteBazaarEntry}
             settings={settings}
             assignedBazaarPersons={assignedBazaarPersons}
-            onUpdateAssignedPersons={setAssignedBazaarPersons}
+            onUpdateAssignedPersons={(selectedIds) => {
+              const cleanIds = Array.from(new Set(selectedIds)).filter(id =>
+                users.some(u => u.id === id)
+              );
+              setAssignedBazaarPersons(cleanIds);
+
+              const nextSettings: SystemSettings = {
+                ...settings,
+                assignedBazaarPersons: cleanIds,
+              };
+              setSettings(nextSettings);
+              syncSettingsToSupabase(nextSettings);
+
+              const assignedNames = cleanIds
+                .map(id => users.find(u => u.id === id)?.name)
+                .filter((name): name is string => Boolean(name));
+
+              logAction(
+                'Bazaar Duty Assigned',
+                cleanIds.length > 0
+                  ? `Assigned bazaar duty to: ${assignedNames.join(', ')}`
+                  : 'Cleared all assigned bazaar buyer duties'
+              );
+
+              if (cleanIds.length > 0) {
+                const assignerName = currentUser?.name || currentPersona;
+                const isBn = settings.language === 'Bangla';
+                cleanIds.forEach(uid => {
+                  const member = users.find(u => u.id === uid);
+                  const memberName = member?.name || 'Member';
+                  handleAddNotification(
+                    'BazaarReminder',
+                    isBn ? 'বাজারের দায়িত্ব নির্ধারণ করা হয়েছে' : 'Bazaar Duty Assigned',
+                    isBn
+                      ? `হ্যালো ${memberName}, ${assignerName} আপনাকে বাজারের দায়িত্ব দিয়েছেন। অনুগ্রহ করে বাজার তালিকা সমন্বয় করুন এবং খরচ এন্ট্রি দিন।`
+                      : `Hi ${memberName}, ${assignerName} has assigned you for Bazaar Duty. Please coordinate the shopping list and log your bazaar expenses.`,
+                    uid,
+                    'Bazaar'
+                  );
+                });
+                showToast(
+                  isBn
+                    ? `বাজারের দায়িত্ব সংরক্ষণ ও ${cleanIds.length} জন সদস্যকে নোটিফিকেশন পাঠানো হয়েছে!`
+                    : `Bazaar duties saved and notification sent to ${cleanIds.length} selected member(s)!`,
+                  'success'
+                );
+              } else {
+                showToast(
+                  settings.language === 'Bangla'
+                    ? 'বাজারের দায়িত্ব তালিকা খালি করা হয়েছে।'
+                    : 'Assigned bazaar buyer list cleared.',
+                  'info'
+                );
+              }
+            }}
             onTriggerBazaarReminder={handleTriggerBazaarReminder}
           />
         );
