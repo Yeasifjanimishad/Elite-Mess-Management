@@ -119,19 +119,23 @@ export default function HelpGuideTab({
   let totalMessMeals = 0;
   let myOwnMeals = 0;
   let myGuestMeals = 0;
+  const userMealTotals = new Map<string, number>();
 
   activeUsers.forEach(u => {
     const sheet = meals.find(m => m.userId === u.id);
+    let userMeals = 0;
     monthDates.forEach(d => {
       const m = getEffectiveDayMeal(sheet, u, d, settings, today, tomorrow, isVac(u.id, d));
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1 : 0) + (m.dinner ? 1 : 0);
       const guest = (m.guestBreakfast || 0) * 0.5 + (m.guestLunch || 0) + (m.guestDinner || 0);
-      totalMessMeals += own + guest;
+      userMeals += own + guest;
       if (u.id === currentUser.id) {
         myOwnMeals += own;
         myGuestMeals += guest;
       }
     });
+    userMealTotals.set(u.id, userMeals);
+    totalMessMeals += userMeals;
   });
 
   const currentMealRate = totalMessMeals > 0 ? totalMessExpense / totalMessMeals : 0;
@@ -146,6 +150,38 @@ export default function HelpGuideTab({
   const assignedBuyersNames = assignedBazaarPersons
     .map(id => allUsers.find(u => u.id === id)?.name)
     .filter((n): n is string => Boolean(n));
+
+  // Admin-only sensitive mess summary (never exposed to Member or Meal Manager)
+  const adminSummary =
+    role === 'Admin'
+      ? (() => {
+          const totalApprovedDeposits = deposits
+            .filter(d => d.date.startsWith(activeMonth) && d.status === 'Approved')
+            .reduce((s, d) => s + d.amount, 0);
+          const totalCarryForward = activeUsers.reduce((s, u) => s + (u.carryForward || 0), 0);
+          const dueMembers = activeUsers
+            .map(u => {
+              const uMeals = userMealTotals.get(u.id) || 0;
+              const uBill = uMeals * currentMealRate;
+              const uDeposits = deposits
+                .filter(d => d.userId === u.id && d.date.startsWith(activeMonth) && d.status === 'Approved')
+                .reduce((s, d) => s + d.amount, 0);
+              const bal = (u.carryForward || 0) + uDeposits - uBill;
+              return { name: u.name, role: u.role, balance: Number(bal.toFixed(2)) };
+            })
+            .filter(m => m.balance < 0);
+
+          return {
+            totalApprovedBazaar: Number(approvedBazaarTotal.toFixed(2)),
+            totalUtilityBills: Number(otherExpenseTotal.toFixed(2)),
+            totalApprovedDeposits: Number(totalApprovedDeposits.toFixed(2)),
+            netMessCashBalance: Number((totalCarryForward + totalApprovedDeposits - totalMessExpense).toFixed(2)),
+            membersWithDueCount: dueMembers.length,
+            totalMembersDue: Number(dueMembers.reduce((s, m) => s + Math.abs(m.balance), 0).toFixed(2)),
+            dueMembersList: dueMembers,
+          };
+        })()
+      : undefined;
 
   // Role-specific User Manual sections
   const memberManualSections: ManualSection[] = [
@@ -541,6 +577,48 @@ export default function HelpGuideTab({
         .slice(-8)
         .map(m => ({ role: m.role, content: m.content }));
 
+      const baseContext: Record<string, unknown> = {
+        userName: currentUser.name,
+        role,
+        language: settings.language,
+        messName: settings.systemName,
+        activeMonth: activeMonthLabel,
+        currency,
+        isMonthClosed: settings.isMonthClosed,
+        mealLockTime: lockTimeDisplay,
+        defaultMealOn: settings.defaultMealOn,
+        guestMealLimit: settings.guestMealLimit,
+        hasBkash: Boolean(settings.bkashNumber?.trim()),
+        hasNagad: Boolean(settings.nagadNumber?.trim()),
+        currentMealRate: Number(currentMealRate.toFixed(2)),
+        myTotalMeals: Number(myTotalMeals.toFixed(1)),
+        myEstimatedBill: Number(myEstimatedBill.toFixed(2)),
+        myApprovedDeposits: Number(myApprovedDeposits.toFixed(2)),
+        myCarryForward: Number((currentUser.carryForward || 0).toFixed(2)),
+        myBalance: Number(myBalance.toFixed(2)),
+        assignedBazaarBuyers: assignedBuyersNames,
+      };
+
+      const roleScopedContext: Record<string, unknown> =
+        role === 'Member'
+          ? baseContext
+          : {
+              ...baseContext,
+              activeMembersCount: activeUsers.length,
+              totalMessMeals: Number(totalMessMeals.toFixed(1)),
+              totalMessExpense: Number(totalMessExpense.toFixed(2)),
+              pendingBazaarCount,
+              pendingDepositsCount,
+              managerPermissions: {
+                approveBazaar: settings.mgrCanApproveBazaar !== false,
+                addDeposit: settings.mgrCanAddDeposit !== false,
+                addExpense: settings.mgrCanAddExpense !== false,
+                manageUsers: Boolean(settings.mgrCanManageUsers),
+                publishNotice: settings.mgrCanPublishNotice !== false,
+              },
+              ...(role === 'Admin' && adminSummary ? { adminSummary } : {}),
+            };
+
       const resp = await fetch('/api/ai-assistant', {
         method: 'POST',
         headers: {
@@ -550,39 +628,7 @@ export default function HelpGuideTab({
         body: JSON.stringify({
           stream: true,
           messages: apiMessages,
-          context: {
-            userName: currentUser.name,
-            role,
-            language: settings.language,
-            messName: settings.systemName,
-            activeMonth: activeMonthLabel,
-            currency,
-            isMonthClosed: settings.isMonthClosed,
-            mealLockTime: lockTimeDisplay,
-            defaultMealOn: settings.defaultMealOn,
-            guestMealLimit: settings.guestMealLimit,
-            hasBkash: Boolean(settings.bkashNumber?.trim()),
-            hasNagad: Boolean(settings.nagadNumber?.trim()),
-            activeMembersCount: activeUsers.length,
-            totalMessMeals: Number(totalMessMeals.toFixed(1)),
-            totalMessExpense: Number(totalMessExpense.toFixed(2)),
-            currentMealRate: Number(currentMealRate.toFixed(2)),
-            myTotalMeals: Number(myTotalMeals.toFixed(1)),
-            myEstimatedBill: Number(myEstimatedBill.toFixed(2)),
-            myApprovedDeposits: Number(myApprovedDeposits.toFixed(2)),
-            myCarryForward: Number((currentUser.carryForward || 0).toFixed(2)),
-            myBalance: Number(myBalance.toFixed(2)),
-            pendingBazaarCount,
-            pendingDepositsCount,
-            assignedBazaarBuyers: assignedBuyersNames,
-            managerPermissions: {
-              approveBazaar: settings.mgrCanApproveBazaar !== false,
-              addDeposit: settings.mgrCanAddDeposit !== false,
-              addExpense: settings.mgrCanAddExpense !== false,
-              manageUsers: Boolean(settings.mgrCanManageUsers),
-              publishNotice: settings.mgrCanPublishNotice !== false,
-            },
-          },
+          context: roleScopedContext,
         }),
       });
 
