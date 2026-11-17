@@ -2835,13 +2835,10 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-                className="p-2 rounded-xl text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer"
-                title={settings.language === 'Bangla' ? 'আপনার ব্যক্তিগত থিম পরিবর্তন করুন' : 'Change Your Personal Theme'}
+                className="p-2 rounded-xl text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
+                title={settings.language === 'Bangla' ? `আপনার ব্যক্তিগত থিম (${activeUserTheme})` : `Personal Theme (${activeUserTheme})`}
               >
                 <Palette size={18} />
-                <span className="hidden xl:inline text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                  {activeUserTheme}
-                </span>
               </button>
 
               {themeMenuOpen && (

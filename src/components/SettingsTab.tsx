@@ -12,8 +12,6 @@ import {
   Moon, 
   Download, 
   Upload, 
-  Palette, 
-  Check,
   Shield,
   Coins,
   Megaphone,
@@ -55,54 +53,6 @@ interface SettingsTabProps {
     settings?: SystemSettings;
   };
 }
-
-const themeOptions = [
-  { 
-    id: 'Light', 
-    name: 'Light Slate', 
-    desc: 'Sleek off-white theme with gray borders',
-    cardStyles: 'bg-slate-50 border-slate-200 text-slate-800',
-    titleStyles: 'text-slate-900',
-    descStyles: 'text-slate-500',
-    dots: ['bg-slate-100', 'bg-slate-300', 'bg-emerald-500']
-  },
-  { 
-    id: 'Dark', 
-    name: 'Charcoal Dark', 
-    desc: 'Classic, highly legible eye-safe dark theme',
-    cardStyles: 'bg-slate-900 border-slate-800 text-slate-100',
-    titleStyles: 'text-white',
-    descStyles: 'text-slate-400',
-    dots: ['bg-slate-950', 'bg-slate-700', 'bg-emerald-500']
-  },
-  { 
-    id: 'Cosmic Slate', 
-    name: 'Cosmic Slate', 
-    desc: 'Futuristic slate mixed with deep indigo hues',
-    cardStyles: 'bg-[#030014] border-indigo-950/45 text-indigo-100',
-    titleStyles: 'text-indigo-300 font-extrabold',
-    descStyles: 'text-indigo-400/80',
-    dots: ['bg-[#030014]', 'bg-indigo-950', 'bg-indigo-500']
-  },
-  { 
-    id: 'Emerald Forest', 
-    name: 'Emerald Forest', 
-    desc: 'Rich pine forest backgrounds with fresh moss highlights',
-    cardStyles: 'bg-[#022c16] border-emerald-950/45 text-emerald-100',
-    titleStyles: 'text-emerald-300 font-extrabold',
-    descStyles: 'text-emerald-400/80',
-    dots: ['bg-[#022c16]', 'bg-emerald-900', 'bg-emerald-500']
-  },
-  { 
-    id: 'Rose Quartz', 
-    name: 'Rose Quartz (Pink)', 
-    desc: 'Delicate pink accents with dark cherry-blossom tones',
-    cardStyles: 'bg-[#1c0612] border-pink-950/45 text-pink-100',
-    titleStyles: 'text-pink-300 font-extrabold',
-    descStyles: 'text-pink-400/80',
-    dots: ['bg-[#1c0612]', 'bg-pink-950', 'bg-pink-500']
-  }
-];
 
 export default function SettingsTab({
   role,
@@ -333,8 +283,8 @@ export default function SettingsTab({
           <ShieldAlert size={16} className="shrink-0" />
           <span>
             {isBangla 
-              ? 'পার্সোনাল থিম আনলকড: আপনি নিচে থেকে নিজের জন্য পছন্দের থিম বেছে নিতে পারবেন। তবে মেসের গ্লোবাল সিস্টেম সেটিংস ও পারমিশন শুধুমাত্র অ্যাডমিন পরিবর্তন করতে পারেন।'
-              : 'Personal Theme Unlocked: You can freely change your own visual theme below anytime. Global mess configuration and permissions remain Admin-only.'}
+              ? 'শুধুমাত্র দেখার মোড: সিস্টেম সেটিংস এবং ম্যানেজার পারমিশন শুধুমাত্র অ্যাডমিন পরিবর্তন করতে পারেন। ব্যক্তিগত থিম উপরের হেডার আইকন থেকে পরিবর্তন করা যাবে।'
+              : 'Read-Only Mode: Global mess configuration and permissions remain Admin-only. You can switch your personal theme anytime from the header palette icon.'}
           </span>
         </div>
       )}
@@ -512,75 +462,6 @@ export default function SettingsTab({
                     </span>
                   </div>
                 </label>
-              </div>
-
-              {/* VISUAL THEME SELECTION PANEL (UNLOCKED FOR ALL USERS) */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-                      {isBangla ? 'আপনার ব্যক্তিগত থিম প্রিসেট' : 'Your Personal Theme Preset'}
-                    </label>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                      {isBangla 
-                        ? 'সব সদস্য এবং ম্যানেজার নিজের পছন্দমতো থিম বেছে নিতে পারবেন—ক্লিক করলেই সাথে সাথে আপনার প্রোফাইলে সেভ হবে।'
-                        : 'Every member, manager, and admin can customize their own visual theme here—clicking any theme applies immediately.'}
-                    </p>
-                  </div>
-                  <span className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-extrabold">
-                    {isBangla ? 'সবার জন্য উন্মুক্ত' : 'Everyone Can Customize'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {themeOptions.map((opt) => {
-                    const currentSelectedTheme = activeTheme || formData.theme || 'Light';
-                    const isSelected = currentSelectedTheme === opt.id;
-                    return (
-                      <div
-                        key={opt.id}
-                        onClick={() => {
-                          const chosen = opt.id as NonNullable<SystemSettings['theme']>;
-                          if (onChangeUserTheme) {
-                            onChangeUserTheme(chosen);
-                          }
-                          if (isAdmin) {
-                            handleChange('theme', chosen);
-                          }
-                          setMessage({
-                            text: isBangla
-                              ? `আপনার থিম "${opt.name}"-এ পরিবর্তন করা হয়েছে!`
-                              : `Your personal theme switched to "${opt.name}"!`,
-                            type: 'success'
-                          });
-                          setTimeout(() => setMessage(null), 2500);
-                        }}
-                        className={`border rounded-xl p-3.5 flex flex-col justify-between transition h-28 relative cursor-pointer ${opt.cardStyles} ${
-                          isSelected 
-                            ? 'border-emerald-500 ring-2 ring-emerald-500/20' 
-                            : 'border-slate-200 dark:border-slate-800 hover:border-emerald-400/60'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className={`text-xs font-bold ${opt.titleStyles}`}>{opt.name}</span>
-                          {isSelected && (
-                            <span className="bg-emerald-500 text-white rounded-full p-0.5 flex items-center justify-center">
-                              <Check size={10} />
-                            </span>
-                          )}
-                        </div>
-                        <p className={`text-[10px] leading-tight pr-4 ${opt.descStyles}`}>{opt.desc}</p>
-                        
-                        {/* Mini Color Dots preview */}
-                        <div className="flex items-center gap-1.5 mt-2">
-                          {opt.dots.map((d, i) => (
-                            <span key={i} className={`w-2.5 h-2.5 rounded-full ${d} border border-white/10`}></span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
 
               {/* SUBMIT BUTTON */}
