@@ -29,6 +29,7 @@ import {
   parseTime24To12,
   formatTime12To24
 } from '../utils/dateUtils';
+import { useFeedback } from './FeedbackContext';
 
 interface SettingsTabProps {
   role: UserRole;
@@ -67,6 +68,7 @@ export default function SettingsTab({
   allDataToBackup
 }: SettingsTabProps) {
 
+  const { showToast } = useFeedback();
   const isAdmin = role === 'Admin';
   const isBangla = settings.language === 'Bangla';
   const activeMonth = settings.activeMonth || getRealCurrentMonth();
@@ -116,25 +118,50 @@ export default function SettingsTab({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) {
-      setMessage({ text: isBangla ? 'অননুমোদিত! শুধুমাত্র অ্যাডমিন কনফিগারেশন সংরক্ষণ করতে পারেন।' : 'Unauthorized! Only system Admins can save global configurations.', type: 'error' });
+      const errMsg = isBangla
+        ? 'অননুমোদিত! শুধুমাত্র অ্যাডমিন কনফিগারেশন সংরক্ষণ করতে পারেন।'
+        : 'Unauthorized! Only system Admins can save global configurations.';
+      showToast(errMsg, 'error');
+      setMessage({ text: errMsg, type: 'error' });
       setTimeout(() => setMessage(null), 4000);
       return;
     }
 
-    onUpdateSettings(formData);
-    
-    // Automatically trigger dark mode state sync based on the theme
-    if (formData.theme === 'Light') {
-      setDarkMode(false);
-    } else {
-      setDarkMode(true);
-    }
+    const keysToCompare: Array<keyof SystemSettings> = [
+      'systemName',
+      'activeMonth',
+      'mealLockTime',
+      'defaultMealOn',
+      'currency',
+      'guestMealLimit',
+      'language',
+      'mgrCanApproveBazaar',
+      'mgrCanAddDeposit',
+      'mgrCanAddExpense',
+      'mgrCanManageUsers',
+      'mgrCanPublishNotice',
+    ];
 
-    setMessage({ 
-      text: isBangla 
-        ? 'সিস্টেম কনফিগারেশন সফলভাবে সংরক্ষিত হয়েছে!' 
-        : 'System configuration saved successfully. Styles and variables updated.', 
-      type: 'success' 
+    const hasChanges = keysToCompare.some((k) => formData[k] !== settings[k]);
+
+    // Preserve global default theme without altering the active user's personal header theme/darkMode
+    onUpdateSettings({
+      ...formData,
+      theme: settings.theme || 'Light',
+    });
+
+    const feedbackText = hasChanges
+      ? (isBangla
+          ? 'সেটিংস সফলভাবে পরিবর্তন ও সংরক্ষণ করা হয়েছে!'
+          : 'Settings changed and saved successfully!')
+      : (isBangla
+          ? 'বর্তমান সেটিংস সংরক্ষিত আছে।'
+          : 'Current settings saved.');
+
+    showToast(feedbackText, hasChanges ? 'success' : 'info');
+    setMessage({
+      text: feedbackText,
+      type: 'success'
     });
     setTimeout(() => setMessage(null), 3000);
   };
@@ -142,7 +169,11 @@ export default function SettingsTab({
   // Close Month / Reopen month triggers
   const handleToggleMonthClose = () => {
     if (!isAdmin) {
-      setMessage({ text: isBangla ? 'অননুমোদিত! শুধুমাত্র অ্যাডমিন এই মাসের স্থিতি পরিবর্তন করতে পারেন।' : 'Unauthorized! Only system Admins can toggle closed months.', type: 'error' });
+      const errMsg = isBangla
+        ? 'অননুমোদিত! শুধুমাত্র অ্যাডমিন এই মাসের স্থিতি পরিবর্তন করতে পারেন।'
+        : 'Unauthorized! Only system Admins can toggle closed months.';
+      showToast(errMsg, 'error');
+      setMessage({ text: errMsg, type: 'error' });
       setTimeout(() => setMessage(null), 4500);
       return;
     }
@@ -150,17 +181,21 @@ export default function SettingsTab({
     const nextState = !settings.isMonthClosed;
     const updated = {
       ...formData,
+      theme: settings.theme || 'Light',
       isMonthClosed: nextState
     };
 
     setFormData(updated);
     onUpdateSettings(updated);
 
-    setMessage({ 
-      text: nextState 
-        ? (isBangla ? 'মাস সফলভাবে বন্ধ করা হয়েছে। সমস্ত ডেটা এখন লক করা আছে।' : 'Month closed successfully. All ledgers and meal sheets are now locked read-only.')
-        : (isBangla ? 'মাস সফলভাবে পুনরায় খোলা হয়েছে।' : 'Month unlocked successfully by administrator.'), 
-      type: 'success' 
+    const statusMsg = nextState
+      ? (isBangla ? 'মাস সফলভাবে বন্ধ করা হয়েছে। সমস্ত ডেটা এখন লক করা আছে।' : 'Month closed successfully. All ledgers and meal sheets are now locked read-only.')
+      : (isBangla ? 'মাস সফলভাবে পুনরায় খোলা হয়েছে।' : 'Month unlocked successfully by administrator.');
+
+    showToast(statusMsg, 'success');
+    setMessage({
+      text: statusMsg,
+      type: 'success'
     });
     setTimeout(() => setMessage(null), 4000);
   };
@@ -203,11 +238,13 @@ export default function SettingsTab({
       link.click();
       document.body.removeChild(link);
 
-      setMessage({ 
-        text: isBangla 
-          ? 'সম্পূর্ণ সিস্টেম ডাটাবেস ব্যাকআপ সফলভাবে ডাউনলোড করা হয়েছে!' 
-          : 'Full system database backup file downloaded successfully.', 
-        type: 'success' 
+      const backupMsg = isBangla
+        ? 'সম্পূর্ণ সিস্টেম ডাটাবেস ব্যাকআপ সফলভাবে ডাউনলোড করা হয়েছে!'
+        : 'Full system database backup file downloaded successfully.';
+      showToast(backupMsg, 'success');
+      setMessage({
+        text: backupMsg,
+        type: 'success'
       });
       setTimeout(() => setMessage(null), 3500);
     }, 1000);
@@ -218,7 +255,11 @@ export default function SettingsTab({
 
   const handleRestoreClick = () => {
     if (!isAdmin) {
-      setMessage({ text: isBangla ? 'অননুমোদিত! ব্যাকআপ পুনরুদ্ধার করতে অ্যাডমিন হতে হবে।' : 'Unauthorized! Only Admins are allowed to restore system states.', type: 'error' });
+      const errMsg = isBangla
+        ? 'অননুমোদিত! ব্যাকআপ পুনরুদ্ধার করতে অ্যাডমিন হতে হবে।'
+        : 'Unauthorized! Only Admins are allowed to restore system states.';
+      showToast(errMsg, 'error');
+      setMessage({ text: errMsg, type: 'error' });
       setTimeout(() => setMessage(null), 4000);
       return;
     }
@@ -244,17 +285,23 @@ export default function SettingsTab({
         if (onRestoreBackup) {
           onRestoreBackup(parsed.payload);
           setFormData({ ...parsed.payload.settings });
-          setMessage({ 
-            text: isBangla 
-              ? 'সিস্টেম ডাটাবেস সফলভাবে পূর্বাবস্থায় ফিরিয়ে আনা হয়েছে!' 
-              : 'Database snapshots restored successfully! All tables updated.', 
-            type: 'success' 
+          const okMsg = isBangla
+            ? 'সিস্টেম ডাটাবেস সফলভাবে পূর্বাবস্থায় ফিরিয়ে আনা হয়েছে!'
+            : 'Database snapshots restored successfully! All tables updated.';
+          showToast(okMsg, 'success');
+          setMessage({
+            text: okMsg,
+            type: 'success'
           });
         } else {
-          setMessage({ text: 'Backup restore callback is not wired up. Re-instantiating state.', type: 'error' });
+          const errMsg = 'Backup restore callback is not wired up. Re-instantiating state.';
+          showToast(errMsg, 'error');
+          setMessage({ text: errMsg, type: 'error' });
         }
       } catch (err: any) {
-        setMessage({ text: `Restore failed: ${err.message || 'Malformed JSON file'}`, type: 'error' });
+        const errMsg = `Restore failed: ${err.message || 'Malformed JSON file'}`;
+        showToast(errMsg, 'error');
+        setMessage({ text: errMsg, type: 'error' });
       } finally {
         setRestoring(false);
         if (fileInputRef.current) fileInputRef.current.value = '';

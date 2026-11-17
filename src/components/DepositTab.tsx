@@ -26,7 +26,8 @@ import {
 import { User as UserType, Deposit, SystemSettings, MemberMealSheet, BazaarEntry, Expense } from '../types';
 import { motion } from 'motion/react';
 import { useFeedback } from './FeedbackContext';
-import { getRealCurrentMonth, getEffectiveDatesForMonth, formatMonthLabel, getMonthPickerOptions } from '../utils/dateUtils';
+import { getRealCurrentMonth, getEffectiveDatesForMonth, formatMonthLabel, getMonthPickerOptions, getMonthDates } from '../utils/dateUtils';
+import { getEffectiveDayMeal } from '../utils/mealUtils';
 
 interface DepositTabProps {
   currentUser: UserType;
@@ -117,17 +118,19 @@ export default function DepositTab({
     .reduce((sum, exp) => sum + exp.amount, 0);
   const totalExpenses = totalBazaarCost + totalOtherExpense;
 
+  const monthDates = getMonthDates(activeMonth);
+  const { today: effToday, tomorrow: effTomorrow } = getEffectiveDatesForMonth(activeMonth);
+
   // Total meals consumed across the mess in active month
-  const rawTotalMealsInMonth = meals.reduce((sum, sheet) => {
+  const rawTotalMealsInMonth = allUsers.filter(u => u.isActive).reduce((sum, u) => {
+    const sheet = meals.find(s => s.userId === u.id);
     let sheetSum = 0;
-    Object.keys(sheet.meals)
-      .filter(date => date.startsWith(activeMonth))
-      .forEach(date => {
-        const m = sheet.meals[date];
-        const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-        const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
-        sheetSum += own + guest;
-      });
+    monthDates.forEach(date => {
+      const m = getEffectiveDayMeal(sheet, u, date, settings, effToday, effTomorrow, false);
+      const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
+      const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
+      sheetSum += own + guest;
+    });
     return sum + sheetSum;
   }, 0);
   const totalMealsInMonth = rawTotalMealsInMonth;
@@ -141,16 +144,14 @@ export default function DepositTab({
   
   const getUserMealsCount = (userId: string) => {
     const sheet = meals.find(s => s.userId === userId);
-    if (!sheet) return 0;
+    const u = allUsers.find(x => x.id === userId);
     let sum = 0;
-    Object.keys(sheet.meals)
-      .filter(date => date.startsWith(activeMonth))
-      .forEach(date => {
-        const m = sheet.meals[date];
-        const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-        const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
-        sum += own + guest;
-      });
+    monthDates.forEach(date => {
+      const m = getEffectiveDayMeal(sheet, u, date, settings, effToday, effTomorrow, false);
+      const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
+      const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
+      sum += own + guest;
+    });
     return sum;
   };
 

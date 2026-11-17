@@ -94,26 +94,12 @@ export const initialSettings: SystemSettings = {
   mgrCanPublishNotice: true,
 };
 
-// Clean initial meals (all meals set to off/0 for fresh mess state)
-export const generateInitialMeals = (users: User[], monthStr: string = getRealCurrentMonth()): MemberMealSheet[] => {
-  const monthDates = getMonthDates(monthStr);
-  return users.map((user) => {
-    const meals: { [date: string]: any } = {};
-    monthDates.forEach((dateStr) => {
-      meals[dateStr] = {
-        breakfast: false,
-        lunch: false,
-        dinner: false,
-        guestBreakfast: 0,
-        guestLunch: 0,
-        guestDinner: 0
-      };
-    });
-    return {
-      userId: user.id,
-      meals
-    };
-  });
+// Clean initial meals (unmarked dates defer to defaultMealOn policy for today/tomorrow)
+export const generateInitialMeals = (users: User[], _monthStr: string = getRealCurrentMonth()): MemberMealSheet[] => {
+  return users.map((user) => ({
+    userId: user.id,
+    meals: {}
+  }));
 };
 
 export const initialDeposits: Deposit[] = [];

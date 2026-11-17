@@ -31,6 +31,7 @@ import {
   parseLockHourMinute,
   formatTime12hDisplay
 } from '../utils/dateUtils';
+import { getEffectiveDayMeal } from '../utils/mealUtils';
 
 interface MealSheetTabProps {
   currentUser: User;
@@ -210,13 +211,16 @@ export default function MealSheetTab({
   // Helper to determine status and label of a cell
   const getCellData = (sheet: MemberMealSheet, date: string) => {
     const isUserVacationActive = isVacation(sheet.userId, date);
-
-    const dayMeal = isUserVacationActive 
-      ? { breakfast: false, lunch: false, dinner: false, guestBreakfast: 0, guestLunch: 0, guestDinner: 0 }
-      : (sheet.meals[date] || {
-          breakfast: false, lunch: false, dinner: false,
-          guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-        });
+    const userObj = allUsers.find(u => u.id === sheet.userId);
+    const dayMeal = getEffectiveDayMeal(
+      sheet,
+      userObj,
+      date,
+      settings,
+      today,
+      tomorrow,
+      isUserVacationActive
+    );
 
     const hasOwn = dayMeal.breakfast || dayMeal.lunch || dayMeal.dinner;
     const totalGuests = (dayMeal.guestBreakfast || 0) + (dayMeal.guestLunch || 0) + (dayMeal.guestDinner || 0);
@@ -266,16 +270,10 @@ export default function MealSheetTab({
   const calculateRowTotals = (sheet: MemberMealSheet) => {
     let totalMeals = 0;
     let totalGuestMeals = 0;
+    const userObj = allUsers.find(u => u.id === sheet.userId);
 
     dates.forEach(date => {
-      if (isVacation(sheet.userId, date)) {
-        return; // skip meals, they are OFF automatically during vacation
-      }
-      const m = sheet.meals[date] || {
-        breakfast: false, lunch: false, dinner: false,
-        guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-      };
-      // breakfast = 0.5 meal, lunch = 1, dinner = 1
+      const m = getEffectiveDayMeal(sheet, userObj, date, settings, today, tomorrow, isVacation(sheet.userId, date));
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1 : 0) + (m.dinner ? 1 : 0);
       const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1) + ((m.guestDinner || 0) * 1);
       
@@ -296,11 +294,8 @@ export default function MealSheetTab({
     let guestTotal = 0;
 
     visibleMeals.forEach(sheet => {
-      if (isVacation(sheet.userId, dateStr)) return;
-      const m = sheet.meals[dateStr] || {
-        breakfast: false, lunch: false, dinner: false,
-        guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-      };
+      const userObj = allUsers.find(u => u.id === sheet.userId);
+      const m = getEffectiveDayMeal(sheet, userObj, dateStr, settings, today, tomorrow, isVacation(sheet.userId, dateStr));
       ownTotal += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
       guestTotal += ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
     });
@@ -392,12 +387,16 @@ export default function MealSheetTab({
       }
     }
 
-    const dayMeal = isVacation(sheet.userId, date)
-      ? { breakfast: false, lunch: false, dinner: false, guestBreakfast: 0, guestLunch: 0, guestDinner: 0 }
-      : (sheet.meals[date] || {
-          breakfast: false, lunch: false, dinner: false,
-          guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-        });
+    const userObj = allUsers.find(u => u.id === sheet.userId);
+    const dayMeal = getEffectiveDayMeal(
+      sheet,
+      userObj,
+      date,
+      settings,
+      today,
+      tomorrow,
+      isVacation(sheet.userId, date)
+    );
 
     setEditingCell({
       userId: sheet.userId,
@@ -425,7 +424,10 @@ export default function MealSheetTab({
           ...sheet,
           meals: {
             ...sheet.meals,
-            [editingCell.date]: editingCell.mealsState
+            [editingCell.date]: {
+              ...editingCell.mealsState,
+              isManual: true,
+            }
           }
         };
       }
@@ -436,10 +438,16 @@ export default function MealSheetTab({
 
     // Dynamic logging for audit logs
     const targetSheet = meals.find(sheet => sheet.userId === editingCell.userId);
-    const oldDayMeal = targetSheet?.meals[editingCell.date] || {
-      breakfast: false, lunch: false, dinner: false,
-      guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-    };
+    const targetUserObj = allUsers.find(u => u.id === editingCell.userId);
+    const oldDayMeal = getEffectiveDayMeal(
+      targetSheet,
+      targetUserObj,
+      editingCell.date,
+      settings,
+      today,
+      tomorrow,
+      isVacation(editingCell.userId, editingCell.date)
+    );
 
     const oldMealLabel = `Breakfast:${oldDayMeal.breakfast ? 'ON' : 'OFF'}, Lunch:${oldDayMeal.lunch ? 'ON' : 'OFF'}, Dinner:${oldDayMeal.dinner ? 'ON' : 'OFF'}, Guests(B:${oldDayMeal.guestBreakfast || 0}, L:${oldDayMeal.guestLunch || 0}, D:${oldDayMeal.guestDinner || 0})`;
     const newMealLabel = `Breakfast:${editingCell.mealsState.breakfast ? 'ON' : 'OFF'}, Lunch:${editingCell.mealsState.lunch ? 'ON' : 'OFF'}, Dinner:${editingCell.mealsState.dinner ? 'ON' : 'OFF'}, Guests(B:${editingCell.mealsState.guestBreakfast}, L:${editingCell.mealsState.guestLunch}, D:${editingCell.mealsState.guestDinner})`;
@@ -466,6 +474,12 @@ export default function MealSheetTab({
     }
 
     setEditingCell(null);
+    showToast(
+      isBangla
+        ? `${editingCell.userName}-এর মিল স্ট্যাটাস সংরক্ষণ করা হয়েছে!`
+        : `Meal status saved for ${editingCell.userName}!`,
+      'success'
+    );
   };
 
   // Only show the currentUser's row if they are a standard Member, filtered by search query

@@ -23,6 +23,7 @@ export interface MealStatus {
   guestDinner: number;
   managerAdjustment?: number;
   adjustmentReason?: string;
+  isManual?: boolean;
 }
 
 // Maps date string "YYYY-MM-DD" to user meal status

@@ -41,8 +41,10 @@ import {
   getNextMonth,
   formatMonthLabel,
   getMonthPickerOptions,
-  getWeekRangesForMonth
+  getWeekRangesForMonth,
+  getEffectiveDatesForMonth
 } from '../utils/dateUtils';
+import { getEffectiveDayMeal } from '../utils/mealUtils';
 
 interface ReportsTabProps {
   allUsers: User[];
@@ -111,6 +113,7 @@ export default function ReportsTab({
   const { showToast } = useFeedback();
 
   const monthDates = getMonthDates(selectedMonth);
+  const { today, tomorrow } = getEffectiveDatesForMonth(activeMonth);
   const daysInMonth = getDaysInMonth(selectedMonth);
   const nextMonth = getNextMonth(activeMonth);
   const selectedMonthLabel = formatMonthLabel(selectedMonth, settings.language);
@@ -168,15 +171,7 @@ export default function ReportsTab({
       let userSum = 0;
       const userSheet = meals.find(s => s.userId === user.id);
       monthDates.forEach(dateStr => {
-        if (isVacation(user.id, dateStr)) return;
-        const m = userSheet?.meals[dateStr] || {
-          breakfast: false,
-          lunch: false,
-          dinner: false,
-          guestBreakfast: 0,
-          guestLunch: 0,
-          guestDinner: 0
-        };
+        const m = getEffectiveDayMeal(userSheet, user, dateStr, settings, today, tomorrow, isVacation(user.id, dateStr));
         const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
         const guest =
           (m.guestBreakfast || 0) * 0.5 +
@@ -199,15 +194,7 @@ export default function ReportsTab({
     let guestDinnerCount = 0;
 
     monthDates.forEach(dateStr => {
-      if (isVacation(user.id, dateStr)) return;
-      const m = userMealSheet?.meals[dateStr] || {
-        breakfast: false,
-        lunch: false,
-        dinner: false,
-        guestBreakfast: 0,
-        guestLunch: 0,
-        guestDinner: 0
-      };
+      const m = getEffectiveDayMeal(userMealSheet, user, dateStr, settings, today, tomorrow, isVacation(user.id, dateStr));
       ownMealsCount += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
       guestBreakfastCount += m.guestBreakfast || 0;
       guestLunchCount += m.guestLunch || 0;
@@ -283,20 +270,18 @@ export default function ReportsTab({
     let totalDailyMeals = 0;
     let activeDiners = 0;
 
-    meals.forEach(sheet => {
-      if (isVacation(sheet.userId, dateStr)) return;
-      const dayMeal = sheet.meals[dateStr];
-      if (dayMeal) {
-        const ownCount =
-          (dayMeal.breakfast ? 0.5 : 0) + (dayMeal.lunch ? 1.0 : 0) + (dayMeal.dinner ? 1.0 : 0);
-        const guestCount =
-          (dayMeal.guestBreakfast || 0) * 0.5 +
-          (dayMeal.guestLunch || 0) * 1.0 +
-          (dayMeal.guestDinner || 0) * 1.0;
-        const dailySum = ownCount + guestCount;
-        totalDailyMeals += dailySum;
-        if (dailySum > 0) activeDiners++;
-      }
+    allUsers.filter(u => u.isActive).forEach(u => {
+      const sheet = meals.find(s => s.userId === u.id);
+      const dayMeal = getEffectiveDayMeal(sheet, u, dateStr, settings, today, tomorrow, isVacation(u.id, dateStr));
+      const ownCount =
+        (dayMeal.breakfast ? 0.5 : 0) + (dayMeal.lunch ? 1.0 : 0) + (dayMeal.dinner ? 1.0 : 0);
+      const guestCount =
+        (dayMeal.guestBreakfast || 0) * 0.5 +
+        (dayMeal.guestLunch || 0) * 1.0 +
+        (dayMeal.guestDinner || 0) * 1.0;
+      const dailySum = ownCount + guestCount;
+      totalDailyMeals += dailySum;
+      if (dailySum > 0) activeDiners++;
     });
 
     const dailyBazaar = approvedMonthBazaar
@@ -372,17 +357,11 @@ export default function ReportsTab({
   const getUserDailyLedger = () => {
     if (!selectedUserRow) return [];
     const sheet = meals.find(s => s.userId === selectedUserRow.userId);
+    const targetUser = allUsers.find(u => u.id === selectedUserRow.userId);
 
     return monthDates.map(dateStr => {
       const onVacation = isVacation(selectedUserRow.userId, dateStr);
-      const mStatus = sheet?.meals[dateStr] || {
-        breakfast: false,
-        lunch: false,
-        dinner: false,
-        guestBreakfast: 0,
-        guestLunch: 0,
-        guestDinner: 0
-      };
+      const mStatus = getEffectiveDayMeal(sheet, targetUser, dateStr, settings, today, tomorrow, onVacation);
 
       const ownCount = onVacation
         ? 0

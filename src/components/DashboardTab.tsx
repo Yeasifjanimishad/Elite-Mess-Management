@@ -48,6 +48,7 @@ import {
   parseLockHourMinute,
   formatTime12hDisplay
 } from '../utils/dateUtils';
+import { getEffectiveDayMeal } from '../utils/mealUtils';
 
 interface DashboardTabProps {
   currentUser: User;
@@ -114,9 +115,7 @@ export default function DashboardTab({
     let userSum = 0;
     const userSheet = meals.find(s => s.userId === user.id);
     monthDates.forEach(dateStr => {
-      if (isVacation(user.id, dateStr)) return;
-      const m = userSheet?.meals[dateStr];
-      if (!m) return;
+      const m = getEffectiveDayMeal(userSheet, user, dateStr, settings, today, tomorrow, isVacation(user.id, dateStr));
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
       const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
       userSum += own + guest;
@@ -138,12 +137,8 @@ export default function DashboardTab({
 
   // Today's total meal counts
   const todayBreakdown = allUsers.filter(u => u.isActive).reduce((acc, user) => {
-    if (isVacation(user.id, today)) return acc;
     const userSheet = meals.find(s => s.userId === user.id);
-    const m = userSheet?.meals[today] || {
-      breakfast: false, lunch: false, dinner: false,
-      guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-    };
+    const m = getEffectiveDayMeal(userSheet, user, today, settings, today, tomorrow, isVacation(user.id, today));
     acc.breakfast += m.breakfast ? 1 : 0;
     acc.lunch += m.lunch ? 1 : 0;
     acc.dinner += m.dinner ? 1 : 0;
@@ -158,12 +153,8 @@ export default function DashboardTab({
 
   // Tomorrow's total meal counts
   const tomorrowBreakdown = allUsers.filter(u => u.isActive).reduce((acc, user) => {
-    if (isVacation(user.id, tomorrow)) return acc;
     const userSheet = meals.find(s => s.userId === user.id);
-    const m = userSheet?.meals[tomorrow] || {
-      breakfast: false, lunch: false, dinner: false,
-      guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-    };
+    const m = getEffectiveDayMeal(userSheet, user, tomorrow, settings, today, tomorrow, isVacation(user.id, tomorrow));
     acc.breakfast += m.breakfast ? 1 : 0;
     acc.lunch += m.lunch ? 1 : 0;
     acc.dinner += m.dinner ? 1 : 0;
@@ -203,15 +194,11 @@ export default function DashboardTab({
     const userSheet = meals.find(sheet => sheet.userId === user.id);
     let ownMealsCount = 0;
     let guestMealsCount = 0;
-    if (userSheet) {
-      monthDates.forEach(date => {
-        if (isVacation(user.id, date)) return;
-        const m = userSheet.meals[date];
-        if (!m) return;
-        ownMealsCount += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-        guestMealsCount += (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
-      });
-    }
+    monthDates.forEach(date => {
+      const m = getEffectiveDayMeal(userSheet, user, date, settings, today, tomorrow, isVacation(user.id, date));
+      ownMealsCount += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
+      guestMealsCount += ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
+    });
     return {
       user,
       total: ownMealsCount + guestMealsCount,
@@ -265,12 +252,11 @@ export default function DashboardTab({
   const dailyChartData = monthDates.map((dateStr, i) => {
     const dayNum = i + 1;
 
-    const dayMealsTotal = meals.reduce((sum, sheet) => {
-      if (isVacation(sheet.userId, dateStr)) return sum;
-      const m = sheet.meals[dateStr];
-      if (!m) return sum;
+    const dayMealsTotal = activeUsers.reduce((sum, u) => {
+      const sheet = meals.find(s => s.userId === u.id);
+      const m = getEffectiveDayMeal(sheet, u, dateStr, settings, today, tomorrow, isVacation(u.id, dateStr));
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-      const guest = (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
+      const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
       return sum + own + guest;
     }, 0);
 
@@ -313,17 +299,13 @@ export default function DashboardTab({
   const userMealsSheet = meals.find(sheet => sheet.userId === currentUser.id);
   let userTotalMeals = 0;
   let userGuestMeals = 0;
-  if (userMealsSheet) {
-    monthDates.forEach(date => {
-      if (isVacation(currentUser.id, date)) return;
-      const m = userMealsSheet.meals[date];
-      if (!m) return;
-      const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-      const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
-      userTotalMeals += own;
-      userGuestMeals += guest;
-    });
-  }
+  monthDates.forEach(date => {
+    const m = getEffectiveDayMeal(userMealsSheet, currentUser, date, settings, today, tomorrow, isVacation(currentUser.id, date));
+    const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
+    const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
+    userTotalMeals += own;
+    userGuestMeals += guest;
+  });
 
   const userEstimatedBill = (userTotalMeals + userGuestMeals) * currentMealRate;
   const userApprovedMonthDeposits = monthDeposits
@@ -347,14 +329,15 @@ export default function DashboardTab({
   const targetUserId = isManagerOrAdmin ? (selectedMemberId || currentUser.id) : currentUser.id;
   const targetUser = allUsers.find(u => u.id === targetUserId) || currentUser;
   const targetMealsSheet = meals.find(sheet => sheet.userId === targetUserId);
-  const tomorrowMeals = targetMealsSheet?.meals[tomorrow] || {
-    breakfast: false,
-    lunch: false,
-    dinner: false,
-    guestBreakfast: 0,
-    guestLunch: 0,
-    guestDinner: 0
-  };
+  const tomorrowMeals = getEffectiveDayMeal(
+    targetMealsSheet,
+    targetUser,
+    tomorrow,
+    settings,
+    today,
+    tomorrow,
+    isVacation(targetUserId, tomorrow)
+  );
 
   const checkIsTomorrowLocked = (): boolean => {
     if (isManagerOrAdmin) return false;
@@ -398,21 +381,29 @@ export default function DashboardTab({
       return;
     }
 
+    const baseTomorrowMeal = getEffectiveDayMeal(
+      targetMealsSheet,
+      targetUser,
+      tomorrow,
+      settings,
+      today,
+      tomorrow,
+      false
+    );
+
     let sheetFound = false;
     const updated = meals.map(sheet => {
       if (sheet.userId === targetUserId) {
         sheetFound = true;
-        const currentDayMeals = sheet.meals[tomorrow] || {
-          breakfast: false, lunch: false, dinner: false,
-          guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-        };
+        const currentDayMeals = baseTomorrowMeal;
         return {
           ...sheet,
           meals: {
             ...sheet.meals,
             [tomorrow]: {
               ...currentDayMeals,
-              [mealType]: !currentDayMeals[mealType]
+              [mealType]: !currentDayMeals[mealType],
+              isManual: true,
             }
           }
         };
@@ -425,12 +416,9 @@ export default function DashboardTab({
         userId: targetUserId,
         meals: {
           [tomorrow]: {
-            breakfast: mealType === 'breakfast',
-            lunch: mealType === 'lunch',
-            dinner: mealType === 'dinner',
-            guestBreakfast: 0,
-            guestLunch: 0,
-            guestDinner: 0
+            ...baseTomorrowMeal,
+            [mealType]: !baseTomorrowMeal[mealType],
+            isManual: true,
           }
         }
       });
@@ -471,14 +459,21 @@ export default function DashboardTab({
       return;
     }
 
+    const baseTomorrowGuest = getEffectiveDayMeal(
+      targetMealsSheet,
+      targetUser,
+      tomorrow,
+      settings,
+      today,
+      tomorrow,
+      false
+    );
+
     let sheetFound = false;
     const updated = meals.map(sheet => {
       if (sheet.userId === targetUserId) {
         sheetFound = true;
-        const currentDayMeals = sheet.meals[tomorrow] || {
-          breakfast: false, lunch: false, dinner: false,
-          guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-        };
+        const currentDayMeals = baseTomorrowGuest;
         const currentCount = currentDayMeals[mealType] || 0;
         const newCount = Math.max(0, Math.min(settings.guestMealLimit, currentCount + delta));
         return {
@@ -487,7 +482,8 @@ export default function DashboardTab({
             ...sheet.meals,
             [tomorrow]: {
               ...currentDayMeals,
-              [mealType]: newCount
+              [mealType]: newCount,
+              isManual: true,
             }
           }
         };
@@ -500,12 +496,9 @@ export default function DashboardTab({
         userId: targetUserId,
         meals: {
           [tomorrow]: {
-            breakfast: false,
-            lunch: false,
-            dinner: false,
-            guestBreakfast: mealType === 'guestBreakfast' ? Math.max(0, delta) : 0,
-            guestLunch: mealType === 'guestLunch' ? Math.max(0, delta) : 0,
-            guestDinner: mealType === 'guestDinner' ? Math.max(0, delta) : 0
+            ...baseTomorrowGuest,
+            [mealType]: Math.max(0, Math.min(settings.guestMealLimit, delta)),
+            isManual: true,
           }
         }
       });

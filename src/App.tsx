@@ -37,6 +37,7 @@ import {
   getEffectiveDatesForMonth,
   formatTime12hDisplay
 } from './utils/dateUtils';
+import { getEffectiveDayMeal } from './utils/mealUtils';
 
 // Dummy initial data
 import { 
@@ -194,9 +195,36 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          if (!localStorage.getItem('mms_meals_autoon_v2')) {
+            const cleaned: MemberMealSheet[] = parsed.map((sheet: MemberMealSheet) => {
+              const nextMeals: MemberMealSheet['meals'] = {};
+              Object.entries(sheet.meals || {}).forEach(([dStr, m]) => {
+                if (!m) return;
+                const isPlainOffPlaceholder =
+                  !m.isManual &&
+                  !m.adjustmentReason &&
+                  !m.breakfast &&
+                  !m.lunch &&
+                  !m.dinner &&
+                  (m.guestBreakfast || 0) === 0 &&
+                  (m.guestLunch || 0) === 0 &&
+                  (m.guestDinner || 0) === 0;
+                if (!isPlainOffPlaceholder) {
+                  nextMeals[dStr] = m;
+                }
+              });
+              return { userId: sheet.userId, meals: nextMeals };
+            });
+            localStorage.setItem('mms_meals', JSON.stringify(cleaned));
+            localStorage.setItem('mms_meals_autoon_v2', '1');
+            return cleaned;
+          }
+          return parsed;
+        }
       } catch (e) {}
     }
+    localStorage.setItem('mms_meals_autoon_v2', '1');
     return generateInitialMeals(users);
   });
 
@@ -568,16 +596,10 @@ export default function App() {
 
           setMeals(prevMeals => {
             const validUsers = mappedUsers.length > 0 ? mappedUsers : prevMeals.filter(s => isUUID(s.userId)).map(s => ({ id: s.userId }));
-            const nextSheets: MemberMealSheet[] = validUsers.map(u => {
-              const existing = prevMeals.find(s => s.userId === u.id);
-              return {
-                userId: u.id,
-                meals: {
-                  ...(existing?.meals || {}),
-                  ...(userMealsMap[u.id] || {})
-                }
-              };
-            });
+            const nextSheets: MemberMealSheet[] = validUsers.map(u => ({
+              userId: u.id,
+              meals: { ...(userMealsMap[u.id] || {}) }
+            }));
             return nextSheets;
           });
         }
@@ -1431,7 +1453,8 @@ export default function App() {
           const updatedMeals = { ...sheet.meals };
           updatedMeals[tomorrowDate] = {
             ...updatedMeals[tomorrowDate],
-            ...updatedStatus
+            ...updatedStatus,
+            isManual: true,
           };
 
           return {
@@ -1459,22 +1482,29 @@ export default function App() {
       return;
     }
 
+    const { today: effToday, tomorrow: effTomorrow } = getEffectiveDatesForMonth(activeMonth);
+    const isVacUser = (uid: string, d: string) =>
+      vacations.some(vp => vp.userId === uid && d >= vp.startDate && d <= vp.endDate);
+
     setMeals(prevSheets => {
       return prevSheets.map(sheet => {
         if (sheet.userId === userId) {
           const updatedMeals = { ...sheet.meals };
-          const targetDay = updatedMeals[date] || {
-            breakfast: false,
-            lunch: false,
-            dinner: false,
-            guestBreakfast: 0,
-            guestLunch: 0,
-            guestDinner: 0
-          };
+          const targetUserObj = users.find(u => u.id === userId);
+          const targetDay = getEffectiveDayMeal(
+            sheet,
+            targetUserObj,
+            date,
+            settings,
+            effToday,
+            effTomorrow,
+            isVacUser(userId, date)
+          );
 
           updatedMeals[date] = {
             ...targetDay,
-            [mealType]: !targetDay[mealType]
+            [mealType]: !targetDay[mealType],
+            isManual: true,
           };
 
           return {
@@ -1486,10 +1516,21 @@ export default function App() {
       });
     });
 
-    const uName = users.find(u => u.id === userId)?.name || 'Unknown';
+    const targetSheet = meals.find(s => s.userId === userId);
+    const targetUserObj = users.find(u => u.id === userId);
+    const currentEffective = getEffectiveDayMeal(
+      targetSheet,
+      targetUserObj,
+      date,
+      settings,
+      effToday,
+      effTomorrow,
+      isVacUser(userId, date)
+    );
+    const uName = targetUserObj?.name || 'Unknown';
     logAction(
       'Grid Meal Overwrite',
-      `Overrode reservation for ${uName} on ${date} (${mealType}: ${!meals.find(s => s.userId === userId)?.meals[date]?.[mealType] ? 'ON' : 'OFF'})`
+      `Overrode reservation for ${uName} on ${date} (${mealType}: ${!currentEffective[mealType] ? 'ON' : 'OFF'})`
     );
   };
 
@@ -1500,24 +1541,31 @@ export default function App() {
 
     if (currentPersona === 'Member' && userId !== currentUser.id) return;
 
+    const { today: effToday, tomorrow: effTomorrow } = getEffectiveDatesForMonth(activeMonth);
+    const isVacUser = (uid: string, d: string) =>
+      vacations.some(vp => vp.userId === uid && d >= vp.startDate && d <= vp.endDate);
+
     setMeals(prevSheets => {
       return prevSheets.map(sheet => {
         if (sheet.userId === userId) {
           const updatedMeals = { ...sheet.meals };
-          const targetDay = updatedMeals[date] || {
-            breakfast: false,
-            lunch: false,
-            dinner: false,
-            guestBreakfast: 0,
-            guestLunch: 0,
-            guestDinner: 0
-          };
+          const targetUserObj = users.find(u => u.id === userId);
+          const targetDay = getEffectiveDayMeal(
+            sheet,
+            targetUserObj,
+            date,
+            settings,
+            effToday,
+            effTomorrow,
+            isVacUser(userId, date)
+          );
 
           const fieldKey = mealType === 'breakfast' ? 'guestBreakfast' : mealType === 'lunch' ? 'guestLunch' : 'guestDinner';
 
           updatedMeals[date] = {
             ...targetDay,
-            [fieldKey]: count
+            [fieldKey]: count,
+            isManual: true,
           };
 
           return {
@@ -2134,48 +2182,16 @@ export default function App() {
     return true;
   };
 
-  // Ensure all active/existing users have meal sheet date slots initialized for a target month
-  const ensureMealsForMonth = (monthStr: string) => {
-    const targetDates = getMonthDates(monthStr);
+  // Ensure all active/existing users have meal sheet entries initialized
+  const ensureMealsForMonth = (_monthStr: string) => {
     setMeals(prevMeals => {
       const existingUserIds = new Set(prevMeals.map(m => m.userId));
-      const updated = prevMeals.map(sheet => {
-        let changed = false;
-        const nextMeals = { ...sheet.meals };
-        targetDates.forEach(dateStr => {
-          if (!nextMeals[dateStr]) {
-            changed = true;
-            nextMeals[dateStr] = {
-              breakfast: false,
-              lunch: false,
-              dinner: false,
-              guestBreakfast: 0,
-              guestLunch: 0,
-              guestDinner: 0
-            };
-          }
-        });
-        return changed ? { ...sheet, meals: nextMeals } : sheet;
-      });
-
-      users.forEach(u => {
-        if (!existingUserIds.has(u.id)) {
-          const freshMeals: MemberMealSheet['meals'] = {};
-          targetDates.forEach(dateStr => {
-            freshMeals[dateStr] = {
-              breakfast: false,
-              lunch: false,
-              dinner: false,
-              guestBreakfast: 0,
-              guestLunch: 0,
-              guestDinner: 0
-            };
-          });
-          updated.push({ userId: u.id, meals: freshMeals });
-        }
-      });
-
-      return updated;
+      const missingUsers = users.filter(u => !existingUserIds.has(u.id));
+      if (missingUsers.length === 0) return prevMeals;
+      return [
+        ...prevMeals,
+        ...missingUsers.map(u => ({ userId: u.id, meals: {} }))
+      ];
     });
   };
 
@@ -2205,14 +2221,13 @@ export default function App() {
         .reduce((s, e) => s + e.amount, 0);
       const monthTotalExp = monthBazaar + monthOtherExp;
 
+      const { today: closeToday, tomorrow: closeTomorrow } = getEffectiveDatesForMonth(activeMonth);
       const activeUsersList = users.filter(u => u.isActive);
       const totalMonthMeals = activeUsersList.reduce((sum, u) => {
         const sheet = meals.find(s => s.userId === u.id);
         let uMeals = 0;
         monthDates.forEach(d => {
-          if (isVac(u.id, d)) return;
-          const m = sheet?.meals[d];
-          if (!m) return;
+          const m = getEffectiveDayMeal(sheet, u, d, settings, closeToday, closeTomorrow, isVac(u.id, d));
           uMeals += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1 : 0) + (m.dinner ? 1 : 0)
             + ((m.guestBreakfast || 0) * 0.5) + (m.guestLunch || 0) + (m.guestDinner || 0);
         });
@@ -2229,9 +2244,7 @@ export default function App() {
         const sheet = meals.find(s => s.userId === u.id);
         let uMeals = 0;
         monthDates.forEach(d => {
-          if (isVac(u.id, d)) return;
-          const m = sheet?.meals[d];
-          if (!m) return;
+          const m = getEffectiveDayMeal(sheet, u, d, settings, closeToday, closeTomorrow, isVac(u.id, d));
           uMeals += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1 : 0) + (m.dinner ? 1 : 0)
             + ((m.guestBreakfast || 0) * 0.5) + (m.guestLunch || 0) + (m.guestDinner || 0);
         });
@@ -2372,6 +2385,7 @@ export default function App() {
   // Update Settings
   const handleUpdateSettings = (updatedSettings: SystemSettings) => {
     const wasClosed = settings.isMonthClosed;
+    const wasDefaultMealOn = settings.defaultMealOn;
     const prevMonth = settings.activeMonth || getRealCurrentMonth();
     const nextMonth = updatedSettings.activeMonth || prevMonth;
     if (nextMonth !== prevMonth) {
@@ -2379,6 +2393,82 @@ export default function App() {
     }
     setSettings(updatedSettings);
     syncSettingsToSupabase(updatedSettings);
+
+    // Apply Default Meal Reservation Status (AUTO-ON) across remaining days of active month when toggled
+    if (wasDefaultMealOn !== updatedSettings.defaultMealOn && !updatedSettings.isMonthClosed) {
+      const realToday = getRealTodayStr();
+      const realCurrentMonth = realToday.slice(0, 7);
+      const minAutoDate =
+        nextMonth === realCurrentMonth
+          ? realToday
+          : nextMonth > realCurrentMonth
+          ? `${nextMonth}-01`
+          : '9999-99-99';
+
+      const isVac = (uid: string, d: string) =>
+        vacations.some(vp => vp.userId === uid && d >= vp.startDate && d <= vp.endDate);
+
+      const datesToRemoveInSupabase: Array<{ userId: string; dates: string[] }> = [];
+
+      const nextMealsList = users.map(u => {
+        const existingSheet = meals.find(s => s.userId === u.id);
+        const sheetMeals = { ...(existingSheet?.meals || {}) };
+        const removedDates: string[] = [];
+
+        if (u.isActive && u.defaultMealOn !== false) {
+          Object.keys(sheetMeals).forEach(dStr => {
+            if (!dStr.startsWith(nextMonth) || dStr < minAutoDate) return;
+            if (isVac(u.id, dStr)) return;
+            const cur = sheetMeals[dStr];
+            if (!cur || cur.isManual || cur.adjustmentReason) return;
+
+            const noGuests =
+              (cur.guestBreakfast || 0) === 0 &&
+              (cur.guestLunch || 0) === 0 &&
+              (cur.guestDinner || 0) === 0;
+            if (!noGuests) return;
+
+            if (updatedSettings.defaultMealOn) {
+              // Remove uncustomized all-OFF placeholders so AUTO-ON applies automatically
+              if (!cur.breakfast && !cur.lunch && !cur.dinner) {
+                delete sheetMeals[dStr];
+                removedDates.push(dStr);
+              }
+            } else {
+              // Turned OFF: remove uncustomized all-ON entries so default OFF applies
+              if (cur.breakfast && cur.lunch && cur.dinner) {
+                delete sheetMeals[dStr];
+                removedDates.push(dStr);
+              }
+            }
+          });
+        }
+
+        if (removedDates.length > 0 && isUUID(u.id)) {
+          datesToRemoveInSupabase.push({ userId: u.id, dates: removedDates });
+        }
+
+        return {
+          userId: u.id,
+          meals: sheetMeals,
+        };
+      });
+
+      setMeals(nextMealsList);
+
+      if (isSupabaseConfigured && datesToRemoveInSupabase.length > 0) {
+        datesToRemoveInSupabase.forEach(({ userId, dates }) => {
+          supabase
+            .from('meals')
+            .delete()
+            .eq('user_id', userId)
+            .in('date', dates)
+            .then(({ error }) => {
+              if (error) console.error('Error clearing auto-meal placeholders in Supabase:', error);
+            });
+        });
+      }
+    }
 
     const oldText = `Month: ${prevMonth}, Closed: ${settings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${settings.theme || 'Default'}, Lang: ${settings.language || 'English'}, LockTime: ${settings.mealLockTime}`;
     const newText = `Month: ${nextMonth}, Closed: ${updatedSettings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${updatedSettings.theme || 'Default'}, Lang: ${updatedSettings.language || 'English'}, LockTime: ${updatedSettings.mealLockTime}`;
@@ -2427,11 +2517,6 @@ export default function App() {
     if (backupData.assignedBazaarPersons) setAssignedBazaarPersons(backupData.assignedBazaarPersons);
     if (backupData.settings) {
       setSettings(backupData.settings);
-      if (backupData.settings.theme === 'Light') {
-        setDarkMode(false);
-      } else {
-        setDarkMode(true);
-      }
     }
     
     const newLog: ActivityLog = {
