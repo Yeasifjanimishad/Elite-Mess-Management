@@ -6,7 +6,7 @@ import {
   formatAssistantContents,
   parseGeminiError,
   sanitizeContextForRole,
-} from './_gemini';
+} from './_gemini.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') {
