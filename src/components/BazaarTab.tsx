@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Search, 
@@ -18,7 +18,10 @@ import {
   Users,
   Edit,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Upload,
+  Camera,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserType, BazaarEntry, SystemSettings } from '../types';
@@ -78,7 +81,7 @@ const translations = {
     priceLabel: "প্রতি ইউনিটের মূল্য (Price Per Unit)",
     subtotalLabel: "সাবটোটাল (Quantity × Price)",
     totalLabel: "সর্বমোট খরচ (অতিরিক্ত খরচসহ বা সমতুল্য)",
-    receiptLabel: "রসিদ বা রিসিট ইমেজ (Receipt Image URL)",
+    receiptLabel: "রসিদ / বাজারের ছবির আপলোড (Receipt Photo)",
     receiptPresetLabel: "অথবা একটি ডেমো রসিদ ছবি বেছে নিন:",
     notesLabel: "বিশেষ নোট (যদি থাকে)",
     submitAddBtn: "খরচ যুক্ত করুন",
@@ -123,7 +126,7 @@ const translations = {
     priceLabel: "Price Per Unit",
     subtotalLabel: "Subtotal (Quantity × Price)",
     totalLabel: "Total Cost (Including overheads/transport)",
-    receiptLabel: "Receipt Image URL",
+    receiptLabel: "Receipt Photo / Image",
     receiptPresetLabel: "Or select a sample receipt preset:",
     notesLabel: "Additional Notes / Specifications",
     submitAddBtn: "Log Entry Claim",
@@ -180,6 +183,12 @@ export default function BazaarTab({
     }
   }, [assignedBazaarPersons, allUsers, isEditingDuty]);
 
+  useEffect(() => {
+    if (!isManagerOrAdmin && isEditingDuty) {
+      setIsEditingDuty(false);
+    }
+  }, [isManagerOrAdmin, isEditingDuty]);
+
   const validAssignedBuyers = assignedBazaarPersons
     .map(id => allUsers.find(u => u.id === id))
     .filter((u): u is UserType => Boolean(u));
@@ -220,8 +229,196 @@ export default function BazaarTab({
     }
   }, [today, editEntry]);
 
-  // Receipt image zoom popup
+  // Receipt image zoom popup, upload & live camera capture state
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const cameraFallbackInputRef = useRef<HTMLInputElement | null>(null);
+
+  const stopCameraStream = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      cameraStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const handleCloseCamera = () => {
+    stopCameraStream();
+    setIsCameraOpen(false);
+  };
+
+  const handleOpenCamera = async (facing: 'environment' | 'user' = cameraFacing) => {
+    if (isStartingCamera) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast(
+        isBangla
+          ? 'এই ব্রাউজারে সরাসরি ক্যামেরা সাপোর্ট নেই—ফাইল পিকার খোলা হচ্ছে।'
+          : 'Live camera is not supported here—opening device picker.',
+        'info'
+      );
+      cameraFallbackInputRef.current?.click();
+      return;
+    }
+
+    setIsStartingCamera(true);
+    stopCameraStream();
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facing } },
+          audio: false,
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+      cameraStreamRef.current = stream;
+      setCameraFacing(facing);
+      setIsCameraOpen(true);
+    } catch (err: any) {
+      const denied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
+      showToast(
+        denied
+          ? (isBangla ? 'ক্যামেরা পারমিশন পাওয়া যায়নি। ব্রাউজার থেকে ক্যামেরা Allow করুন।' : 'Camera permission denied. Please allow camera access or choose a file.')
+          : (isBangla ? 'ক্যামেরা চালু করা যায়নি। ফাইল থেকে ছবি সিলেক্ট করুন।' : 'Could not open camera. Opening file picker instead.'),
+        'error'
+      );
+      cameraFallbackInputRef.current?.click();
+    } finally {
+      setIsStartingCamera(false);
+    }
+  };
+
+  const handleCaptureCameraPhoto = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      showToast(
+        isBangla ? 'ক্যামেরা এখনো প্রস্তুত নয়, একটু অপেক্ষা করুন।' : 'Camera is still warming up, please wait a moment.',
+        'info'
+      );
+      return;
+    }
+
+    const maxDim = 1200;
+    let width = video.videoWidth;
+    let height = video.videoHeight;
+    if (width > maxDim || height > maxDim) {
+      if (width > height) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    setFormData(prev => ({ ...prev, receiptUrl: dataUrl }));
+    handleCloseCamera();
+    showToast(
+      isBangla ? 'ক্যামেরা দিয়ে রসিদের ছবি তোলা হয়েছে!' : 'Receipt photo captured!',
+      'success'
+    );
+  };
+
+  useEffect(() => {
+    if (isCameraOpen && videoRef.current && cameraStreamRef.current) {
+      const video = videoRef.current;
+      video.srcObject = cameraStreamRef.current;
+      video.play().catch(() => {});
+    }
+  }, [isCameraOpen]);
+
+  useEffect(() => {
+    return () => {
+      stopCameraStream();
+    };
+  }, []);
+
+  const compressReceiptImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Failed to read image file'));
+      reader.onload = () => {
+        const result = reader.result as string;
+        const img = new Image();
+        img.onerror = () => resolve(result);
+        img.onload = () => {
+          const maxDim = 1200;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(result);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.78));
+        };
+        img.src = result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleReceiptFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast(
+        isBangla ? 'অনুগ্রহ করে একটি ছবি (JPG/PNG/WEBP) সিলেক্ট করুন।' : 'Please select a valid image file.',
+        'error'
+      );
+      return;
+    }
+
+    setIsUploadingReceipt(true);
+    try {
+      const compressedDataUrl = await compressReceiptImage(file);
+      setFormData(prev => ({ ...prev, receiptUrl: compressedDataUrl }));
+      showToast(
+        isBangla ? 'রসিদের ছবি সফলভাবে যুক্ত হয়েছে!' : 'Receipt photo attached!',
+        'success'
+      );
+    } catch {
+      showToast(
+        isBangla ? 'ছবি প্রসেস করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।' : 'Could not process image. Please try again.',
+        'error'
+      );
+    } finally {
+      setIsUploadingReceipt(false);
+    }
+  };
 
   const isAssignedToBazaar = assignedBazaarPersons.includes(currentUser.id);
   const canAddBazaar = true;
@@ -261,6 +458,7 @@ export default function BazaarTab({
   };
 
   const handleCloseModal = () => {
+    handleCloseCamera();
     setIsModalOpen(false);
     setEditEntry(null);
   };
@@ -965,18 +1163,100 @@ export default function BazaarTab({
                 </div>
 
                 {/* Receipt image */}
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 block">{t.receiptLabel}</label>
-                  <input
-                    type="url"
-                    placeholder="https://example.com/receipt.jpg"
-                    value={formData.receiptUrl}
-                    onChange={(e) => setFormData({ ...formData, receiptUrl: e.target.value })}
-                    className="w-full px-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none"
-                  />
+
+                  {/* Direct Upload & Camera Capture */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 border border-dashed border-emerald-400 dark:border-emerald-700 rounded-xl text-xs font-bold text-emerald-700 dark:text-emerald-300 cursor-pointer transition">
+                      <Upload size={15} />
+                      <span>
+                        {isUploadingReceipt
+                          ? (isBangla ? 'প্রসেস হচ্ছে...' : 'Processing...')
+                          : (isBangla ? 'গ্যালারি / ফাইল থেকে ছবি' : 'Upload Photo')}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleReceiptFileChange}
+                        disabled={isUploadingReceipt}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <label
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleOpenCamera();
+                      }}
+                      className="flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/70 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer transition"
+                    >
+                      <Camera size={15} className="text-emerald-600 dark:text-emerald-400" />
+                      <span>
+                        {isStartingCamera
+                          ? (isBangla ? 'ক্যামেরা চালু হচ্ছে...' : 'Opening Camera...')
+                          : (isBangla ? 'ক্যামেরা দিয়ে ছবি তুলুন' : 'Take Photo')}
+                      </span>
+                      <input
+                        ref={cameraFallbackInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleReceiptFileChange}
+                        disabled={isUploadingReceipt}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Preview of attached receipt */}
+                  {formData.receiptUrl && (
+                    <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2 flex items-center gap-3">
+                      <img
+                        src={formData.receiptUrl}
+                        alt="Receipt preview"
+                        onClick={() => setViewingReceipt(formData.receiptUrl)}
+                        className="w-16 h-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700 cursor-pointer shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {formData.receiptUrl.startsWith('data:image')
+                            ? (isBangla ? 'আপলোড করা রসিদের ছবি' : 'Uploaded receipt photo')
+                            : (isBangla ? 'সংযুক্ত রসিদ ছবি' : 'Attached receipt image')}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setViewingReceipt(formData.receiptUrl)}
+                          className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer mt-0.5"
+                        >
+                          {isBangla ? 'বড় করে দেখুন' : 'Click to preview'}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, receiptUrl: '' })}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer shrink-0"
+                        title={isBangla ? 'ছবি মুছুন' : 'Remove image'}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Optional direct URL paste */}
+                  {!formData.receiptUrl.startsWith('data:image') && (
+                    <input
+                      type="text"
+                      placeholder={isBangla ? 'অথবা রসিদের ইমেজ লিংক দিন (https://...)' : 'Or paste receipt image URL (https://...)'}
+                      value={formData.receiptUrl}
+                      onChange={(e) => setFormData({ ...formData, receiptUrl: e.target.value })}
+                      className="w-full px-4 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold focus:outline-none"
+                    />
+                  )}
                   
                   {/* Preset Selector */}
-                  <div className="pt-2">
+                  <div className="pt-1">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{t.receiptPresetLabel}</p>
                     <div className="flex flex-wrap gap-1.5">
                       {receiptPresets.map(preset => (
@@ -1018,6 +1298,65 @@ export default function BazaarTab({
                 </button>
 
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* LIVE CAMERA CAPTURE MODAL */}
+      <AnimatePresence>
+        {isCameraOpen && (
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-xs flex items-center justify-center p-4 z-60">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-4 sm:p-5 space-y-4 shadow-2xl"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <Camera size={18} className="text-emerald-600 dark:text-emerald-400" />
+                  {isBangla ? 'রসিদের ছবি তুলুন' : 'Capture Receipt Photo'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleCloseCamera}
+                  className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="relative bg-black rounded-2xl overflow-hidden aspect-4/3 flex items-center justify-center">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenCamera(cameraFacing === 'environment' ? 'user' : 'environment')}
+                  className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition"
+                  title={isBangla ? 'ক্যামেরা পরিবর্তন করুন' : 'Switch Camera'}
+                >
+                  <RefreshCw size={14} />
+                  <span>{isBangla ? 'ক্যামেরা বদলান' : 'Flip'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCaptureCameraPhoto}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition shadow-lg shadow-emerald-500/20"
+                >
+                  <Camera size={16} />
+                  <span>{isBangla ? 'ছবি তুলুন' : 'Capture Photo'}</span>
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

@@ -1,6 +1,6 @@
 {
   "name": "Mess Management System",
   "description": "A modern, highly responsive Mess Management System (MMS) dashboard for tracking meals, bazaar expenses, deposits, and reports.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

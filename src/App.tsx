@@ -630,8 +630,10 @@ export default function App() {
           }));
           setActivityLogs(mappedLogs);
 
-          // Fallback sync for assigned bazaar persons if system_settings.assigned_bazaar_persons column is not yet migrated in live DB
-          if (!Array.isArray(dbSettings?.assigned_bazaar_persons) && mappedUsers.length > 0) {
+          // Fallback sync for assigned bazaar persons if system_settings.assigned_bazaar_persons column is missing or could not be updated
+          const hasNonEmptySettingsAssigned =
+            Array.isArray(dbSettings?.assigned_bazaar_persons) && dbSettings.assigned_bazaar_persons.length > 0;
+          if (!hasNonEmptySettingsAssigned && mappedUsers.length > 0) {
             const latestAssignLog = mappedLogs.find(
               l =>
                 l.details.startsWith('Assigned bazaar duty to: ') ||
@@ -647,11 +649,11 @@ export default function App() {
                   .map(s => s.trim())
                   .filter(Boolean);
                 const resolvedIds = mappedUsers
-                  .filter(u => rawNames.includes(u.name))
+                  .filter(u => rawNames.includes(u.name.trim()))
                   .map(u => u.id);
                 setAssignedBazaarPersons(resolvedIds);
               }
-            } else {
+            } else if (!Array.isArray(dbSettings?.assigned_bazaar_persons)) {
               // Strip stale demo IDs (e.g. 'u-3', 'u-5') when connected to real Supabase UUID users
               setAssignedBazaarPersons(prev => prev.filter(id => mappedUsers.some(u => u.id === id)));
             }
@@ -1810,7 +1812,8 @@ export default function App() {
         subtotal: updatedEntry.subtotal || updatedEntry.price,
         status: updatedEntry.status,
         notes: updatedEntry.notes || null,
-        date: updatedEntry.date
+        date: updatedEntry.date,
+        receipt_url: updatedEntry.receiptUrl || null
       }).eq('id', qId).then(({ error }) => {
         if (error) console.error("Error updating bazaar entry in Supabase:", error);
       });
@@ -2410,9 +2413,20 @@ export default function App() {
       };
 
       const { error } = await supabase.from('system_settings').upsert(fullPayload, { onConflict: 'mess_id' });
-      if (error && (error.message?.includes('column') || error.code === '42703')) {
+      if (error && (error.message?.includes('column') || error.code === '42703' || error.code === 'PGRST204')) {
         const { error: fallbackErr } = await supabase.from('system_settings').upsert(basePayload, { onConflict: 'mess_id' });
         if (fallbackErr) console.error("Error syncing settings to Supabase:", fallbackErr);
+
+        const extendedCols: Record<string, unknown> = {
+          active_month: nextSettings.activeMonth || getRealCurrentMonth(),
+          closed_months: nextSettings.closedMonths || [],
+          lock_override: nextSettings.lockOverride ?? false,
+          theme: nextSettings.theme || 'Light',
+          assigned_bazaar_persons: nextSettings.assignedBazaarPersons ?? assignedBazaarPersons,
+        };
+        for (const [col, val] of Object.entries(extendedCols)) {
+          await supabase.from('system_settings').update({ [col]: val }).eq('mess_id', messId);
+        }
       } else if (error) {
         console.error("Error syncing settings to Supabase:", error);
       }
