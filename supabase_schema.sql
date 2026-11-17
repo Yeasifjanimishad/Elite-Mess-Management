@@ -80,7 +80,12 @@ CREATE INDEX idx_meals_user_date ON meals(user_id, date);
 CREATE TABLE bazaar_entries (
     id BIGSERIAL PRIMARY KEY,
     mess_id UUID REFERENCES messes(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     date DATE NOT NULL,
+    items TEXT,
+    quantity TEXT,
+    price NUMERIC(12,2) DEFAULT 0 NOT NULL,
+    subtotal NUMERIC(12,2) DEFAULT 0 NOT NULL,
     notes TEXT,
     status TEXT DEFAULT 'Pending' NOT NULL CHECK (status IN ('Pending', 'Approved', 'Rejected')),
     approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -164,6 +169,8 @@ CREATE TABLE notices (
     date DATE NOT NULL,
     author_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     attachment TEXT,
+    expiry_date DATE,
+    is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -191,12 +198,16 @@ CREATE INDEX idx_activity_logs_time ON activity_logs(timestamp);
 CREATE TABLE system_settings (
     mess_id UUID UNIQUE REFERENCES messes(id) ON DELETE CASCADE NOT NULL,
     system_name TEXT DEFAULT 'Mess Management System' NOT NULL,
+    active_month TEXT,
+    closed_months JSONB DEFAULT '[]'::jsonb NOT NULL,
     meal_lock_time TEXT DEFAULT '22:00' NOT NULL,
     default_meal_on BOOLEAN DEFAULT TRUE NOT NULL,
     currency TEXT DEFAULT '৳' NOT NULL,
     guest_meal_limit INTEGER DEFAULT 5 NOT NULL,
     is_month_closed BOOLEAN DEFAULT FALSE NOT NULL,
     language TEXT DEFAULT 'Bangla' NOT NULL CHECK (language IN ('English', 'Bangla')),
+    lock_override BOOLEAN DEFAULT FALSE NOT NULL,
+    theme TEXT DEFAULT 'Light' NOT NULL,
     mgr_can_approve_bazaar BOOLEAN DEFAULT TRUE NOT NULL,
     mgr_can_add_deposit BOOLEAN DEFAULT TRUE NOT NULL,
     mgr_can_add_expense BOOLEAN DEFAULT TRUE NOT NULL,
@@ -355,6 +366,11 @@ CREATE POLICY "Allow admins and managers to update all bazaar entries" ON bazaar
         mess_id = public.get_my_mess_id()
     );
 
+CREATE POLICY "Allow admins and managers to delete bazaar entries" ON bazaar_entries
+    FOR DELETE USING (
+        mess_id = public.get_my_mess_id()
+    );
+
 -- 5. Bazaar Items RLS Policies
 CREATE POLICY "Allow read access to bazaar items in the same mess" ON bazaar_items
     FOR SELECT USING (
@@ -446,7 +462,10 @@ CREATE POLICY "Allow read access to settings in same mess" ON system_settings
     );
 
 CREATE POLICY "Allow admins/managers to update settings" ON system_settings
-    FOR UPDATE USING (
+    FOR ALL USING (
+        mess_id = public.get_my_mess_id()
+    )
+    WITH CHECK (
         mess_id = public.get_my_mess_id()
     );
 
@@ -489,6 +508,11 @@ CREATE POLICY "Allow updating notification read status" ON notifications
     FOR UPDATE USING (
         mess_id = public.get_my_mess_id()
         AND (target_user_id IS NULL OR target_user_id = auth.uid())
+    );
+
+CREATE POLICY "Allow inserting notifications in same mess" ON notifications
+    FOR INSERT WITH CHECK (
+        mess_id = public.get_my_mess_id()
     );
 
 
@@ -592,3 +616,36 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- ==========================================================
+-- REALTIME PUBLICATION SETUP
+-- ==========================================================
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'users',
+    'meals',
+    'bazaar_entries',
+    'deposits',
+    'expenses',
+    'notices',
+    'system_settings',
+    'vacation_periods',
+    'monthly_closings',
+    'notifications',
+    'activity_logs'
+  ]
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = t
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
+    END IF;
+  END LOOP;
+END $$;

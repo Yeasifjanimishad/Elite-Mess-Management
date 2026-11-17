@@ -356,14 +356,22 @@ export default function App() {
 
   // Synchronize database records from Supabase and subscribe to Realtime postgres_changes
   useEffect(() => {
-    if (!isSupabaseConfigured || !isAuthenticated || !currentUser?.id) return;
+    if (!isSupabaseConfigured || !isAuthenticated || !currentUser?.id || !isUUID(currentUser.id)) return;
+
+    let isMounted = true;
+    let syncTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function syncAllDataFromSupabase() {
       try {
         // 1. Fetch Users
-        const { data: dbUsers, error: usersErr } = await supabase.from('users').select('*');
-        if (dbUsers && dbUsers.length > 0 && !usersErr) {
-          const mappedUsers: User[] = dbUsers.map(u => ({
+        const { data: dbUsers, error: usersErr } = await supabase
+          .from('users')
+          .select('*')
+          .order('created_at', { ascending: true });
+
+        let mappedUsers: User[] = [];
+        if (dbUsers && dbUsers.length > 0 && !usersErr && isMounted) {
+          mappedUsers = dbUsers.map(u => ({
             id: u.id,
             messId: u.mess_id,
             name: u.name,
@@ -376,11 +384,53 @@ export default function App() {
             carryForward: u.carry_forward ? parseFloat(u.carry_forward) : 0,
           }));
           setUsers(mappedUsers);
+
+          const latestSelf = mappedUsers.find(u => u.id === currentUser.id);
+          if (latestSelf) {
+            setCurrentUser(prev => ({
+              ...prev,
+              ...latestSelf,
+            }));
+          }
         }
 
-        // 2. Fetch Deposits
-        const { data: dbDeposits, error: depErr } = await supabase.from('deposits').select('*');
-        if (dbDeposits && !depErr) {
+        const userNameMap = new Map<string, string>();
+        mappedUsers.forEach(u => userNameMap.set(u.id, u.name));
+
+        // 2. Fetch System Settings
+        const { data: dbSettings, error: settingsErr } = await supabase
+          .from('system_settings')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+        if (dbSettings && !settingsErr && isMounted) {
+          setSettings(prev => ({
+            ...prev,
+            systemName: dbSettings.system_name || prev.systemName,
+            activeMonth: dbSettings.active_month || prev.activeMonth || getRealCurrentMonth(),
+            closedMonths: Array.isArray(dbSettings.closed_months) ? dbSettings.closed_months : (prev.closedMonths || []),
+            mealLockTime: dbSettings.meal_lock_time || prev.mealLockTime,
+            defaultMealOn: dbSettings.default_meal_on ?? prev.defaultMealOn,
+            currency: dbSettings.currency || prev.currency,
+            guestMealLimit: dbSettings.guest_meal_limit ?? prev.guestMealLimit,
+            isMonthClosed: dbSettings.is_month_closed ?? prev.isMonthClosed,
+            language: (dbSettings.language as 'English' | 'Bangla') || prev.language,
+            lockOverride: dbSettings.lock_override ?? prev.lockOverride ?? false,
+            theme: (dbSettings.theme as SystemSettings['theme']) || prev.theme,
+            mgrCanApproveBazaar: dbSettings.mgr_can_approve_bazaar ?? prev.mgrCanApproveBazaar,
+            mgrCanAddDeposit: dbSettings.mgr_can_add_deposit ?? prev.mgrCanAddDeposit,
+            mgrCanAddExpense: dbSettings.mgr_can_add_expense ?? prev.mgrCanAddExpense,
+            mgrCanManageUsers: dbSettings.mgr_can_manage_users ?? prev.mgrCanManageUsers,
+            mgrCanPublishNotice: dbSettings.mgr_can_publish_notice ?? prev.mgrCanPublishNotice,
+          }));
+        }
+
+        // 3. Fetch Deposits
+        const { data: dbDeposits, error: depErr } = await supabase
+          .from('deposits')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (dbDeposits && !depErr && isMounted) {
           const mappedDeposits: Deposit[] = dbDeposits.map(d => ({
             id: String(d.id),
             userId: d.user_id,
@@ -392,9 +442,9 @@ export default function App() {
             status: (d.status || 'Pending') as any
           }));
           setDeposits(prev => {
-            const localPending = prev.filter(d => String(d.id).startsWith('dep-') || d.status === 'Pending');
+            const unsavedLocal = prev.filter(d => String(d.id).startsWith('dep-'));
             const combined = [...mappedDeposits];
-            localPending.forEach(localDep => {
+            unsavedLocal.forEach(localDep => {
               if (!combined.some(d => d.id === localDep.id)) {
                 combined.unshift(localDep);
               }
@@ -403,26 +453,29 @@ export default function App() {
           });
         }
 
-        // 3. Fetch Bazaar Entries
-        const { data: dbBazaar, error: bazErr } = await supabase.from('bazaar_entries').select('*');
-        if (dbBazaar && !bazErr) {
+        // 4. Fetch Bazaar Entries
+        const { data: dbBazaar, error: bazErr } = await supabase
+          .from('bazaar_entries')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (dbBazaar && !bazErr && isMounted) {
           const mappedBazaar: BazaarEntry[] = dbBazaar.map(b => ({
             id: String(b.id),
             date: b.date,
-            items: b.items || 'Bazaar Expense',
-            quantity: b.quantity || 1,
-            price: parseFloat(b.price || b.subtotal || '0'),
-            subtotal: b.subtotal ? parseFloat(b.subtotal) : parseFloat(b.price || '0'),
-            assignedTo: [b.user_id || b.assigned_to || b.approved_by || currentUser?.id || 'u-1'],
+            items: b.items || b.notes || 'Bazaar Expense',
+            quantity: b.quantity ? String(b.quantity) : '1',
+            price: parseFloat(b.price ?? b.subtotal ?? '0'),
+            subtotal: b.subtotal != null ? parseFloat(b.subtotal) : parseFloat(b.price ?? '0'),
+            assignedTo: [b.user_id || b.assigned_to || b.approved_by || currentUser?.id],
             approvedBy: b.approved_by || undefined,
             status: (b.status || 'Pending') as any,
             receiptUrl: b.receipt_url || undefined,
             notes: b.notes || undefined
           }));
           setBazaarEntries(prev => {
-            const localPending = prev.filter(b => String(b.id).startsWith('baz-') || b.status === 'Pending');
+            const unsavedLocal = prev.filter(b => String(b.id).startsWith('baz-'));
             const combined = [...mappedBazaar];
-            localPending.forEach(localBaz => {
+            unsavedLocal.forEach(localBaz => {
               if (!combined.some(b => b.id === localBaz.id)) {
                 combined.unshift(localBaz);
               }
@@ -431,9 +484,12 @@ export default function App() {
           });
         }
 
-        // 4. Fetch Expenses
-        const { data: dbExpenses, error: expErr } = await supabase.from('expenses').select('*');
-        if (dbExpenses && !expErr) {
+        // 5. Fetch Expenses
+        const { data: dbExpenses, error: expErr } = await supabase
+          .from('expenses')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (dbExpenses && !expErr && isMounted) {
           const mappedExpenses: Expense[] = dbExpenses.map(e => ({
             id: String(e.id),
             category: e.category,
@@ -444,9 +500,42 @@ export default function App() {
           setExpenses(mappedExpenses);
         }
 
-        // 5. Fetch Vacations
-        const { data: dbVacations, error: vacErr } = await supabase.from('vacation_periods').select('*');
-        if (dbVacations && !vacErr) {
+        // 6. Fetch Notices
+        const { data: dbNotices, error: noticeErr } = await supabase
+          .from('notices')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (dbNotices && !noticeErr && isMounted) {
+          const mappedNotices: Notice[] = dbNotices.map(n => ({
+            id: String(n.id),
+            title: n.title,
+            description: n.description,
+            priority: n.priority as Notice['priority'],
+            date: n.date,
+            authorId: n.author_id,
+            authorName: userNameMap.get(n.author_id) || 'Mess Admin',
+            attachment: n.attachment || undefined,
+            expiryDate: n.expiry_date || undefined,
+            isPinned: Boolean(n.is_pinned),
+          }));
+          setNotices(prev => {
+            const unsavedLocal = prev.filter(n => String(n.id).startsWith('not-'));
+            const combined = [...mappedNotices];
+            unsavedLocal.forEach(localNotice => {
+              if (!combined.some(n => n.id === localNotice.id)) {
+                combined.unshift(localNotice);
+              }
+            });
+            return combined;
+          });
+        }
+
+        // 7. Fetch Vacations
+        const { data: dbVacations, error: vacErr } = await supabase
+          .from('vacation_periods')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (dbVacations && !vacErr && isMounted) {
           const mappedVacations: VacationPeriod[] = dbVacations.map(v => ({
             id: String(v.id),
             userId: v.user_id,
@@ -456,9 +545,9 @@ export default function App() {
           setVacations(mappedVacations);
         }
 
-        // 6. Fetch Meals
+        // 8. Fetch Meals
         const { data: dbMeals, error: mealsErr } = await supabase.from('meals').select('*');
-        if (dbMeals && dbMeals.length > 0 && !mealsErr) {
+        if (dbMeals && !mealsErr && isMounted) {
           const userMealsMap: Record<string, MemberMealSheet['meals']> = {};
           dbMeals.forEach(m => {
             if (!userMealsMap[m.user_id]) {
@@ -471,37 +560,76 @@ export default function App() {
               guestBreakfast: m.guest_breakfast || 0,
               guestLunch: m.guest_lunch || 0,
               guestDinner: m.guest_dinner || 0,
-              managerAdjustment: m.manager_adjustment || 0,
+              managerAdjustment: m.manager_adjustment ? parseFloat(m.manager_adjustment) : 0,
               adjustmentReason: m.adjustment_reason || undefined
             };
           });
 
           setMeals(prevMeals => {
-            const updated = [...prevMeals];
-            Object.keys(userMealsMap).forEach(uId => {
-              const index = updated.findIndex(sheet => sheet.userId === uId);
-              if (index >= 0) {
-                updated[index] = {
-                  ...updated[index],
-                  meals: {
-                    ...updated[index].meals,
-                    ...userMealsMap[uId]
-                  }
-                };
-              } else {
-                updated.push({
-                  userId: uId,
-                  meals: userMealsMap[uId]
-                });
-              }
+            const validUsers = mappedUsers.length > 0 ? mappedUsers : prevMeals.filter(s => isUUID(s.userId)).map(s => ({ id: s.userId }));
+            const nextSheets: MemberMealSheet[] = validUsers.map(u => {
+              const existing = prevMeals.find(s => s.userId === u.id);
+              return {
+                userId: u.id,
+                meals: {
+                  ...(existing?.meals || {}),
+                  ...(userMealsMap[u.id] || {})
+                }
+              };
             });
-            return updated;
+            return nextSheets;
           });
+        }
+
+        // 9. Fetch Activity Logs
+        const { data: dbLogs, error: logsErr } = await supabase
+          .from('activity_logs')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(200);
+        if (dbLogs && !logsErr && isMounted) {
+          const mappedLogs: ActivityLog[] = dbLogs.map(l => ({
+            id: String(l.id),
+            timestamp: l.timestamp,
+            userId: l.user_id,
+            userName: userNameMap.get(l.user_id) || 'User',
+            action: l.action,
+            details: l.details,
+          }));
+          setActivityLogs(mappedLogs);
+        }
+
+        // 10. Fetch Notifications
+        const { data: dbNotifs, error: notifsErr } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(100);
+        if (dbNotifs && !notifsErr && isMounted) {
+          const mappedNotifs: AppNotification[] = dbNotifs.map(n => ({
+            id: String(n.id),
+            type: n.type as AppNotification['type'],
+            title: n.title,
+            description: n.description,
+            date: n.date,
+            isRead: Boolean(n.is_read),
+            targetUserId: n.target_user_id || undefined,
+            linkToTab: n.link_to_tab || undefined,
+            timestamp: n.timestamp,
+          }));
+          setNotifications(mappedNotifs);
         }
       } catch (err) {
         console.error("Error in syncAllDataFromSupabase:", err);
       }
     }
+
+    const scheduleSync = () => {
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        syncAllDataFromSupabase();
+      }, 250);
+    };
 
     syncAllDataFromSupabase();
 
@@ -509,11 +637,23 @@ export default function App() {
     const channel = supabase
       .channel('public-db-live-sync')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        syncAllDataFromSupabase();
+        scheduleSync();
       })
       .subscribe();
 
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        syncAllDataFromSupabase();
+      }
+    };
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
     return () => {
+      isMounted = false;
+      if (syncTimer) clearTimeout(syncTimer);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       supabase.removeChannel(channel);
     };
   }, [isAuthenticated, currentUser?.id]);
@@ -604,6 +744,7 @@ export default function App() {
           if (dbUser && !error) {
             const mappedUser: User = {
               id: dbUser.id,
+              messId: dbUser.mess_id,
               name: dbUser.name,
               email: dbUser.email,
               phone: dbUser.phone || '',
@@ -630,6 +771,7 @@ export default function App() {
                 if (retryUser && !retryError) {
                   const mappedUser: User = {
                     id: retryUser.id,
+                    messId: retryUser.mess_id,
                     name: retryUser.name,
                     email: retryUser.email,
                     phone: retryUser.phone || '',
@@ -956,6 +1098,20 @@ export default function App() {
       time: timeStr
     };
     setActivityLogs(prev => [newLog, ...prev]);
+
+    if (isSupabaseConfigured && isUUID(currentUserId)) {
+      getSupabaseUserAndMessId(currentUserId, users, currentUser).then(({ userId: dbUserId, messId }) => {
+        if (!messId || !isUUID(dbUserId)) return;
+        supabase.from('activity_logs').insert({
+          mess_id: messId,
+          user_id: dbUserId,
+          action: mappedAction,
+          details,
+        }).then(({ error }) => {
+          if (error) console.error("Error inserting activity log to Supabase:", error);
+        });
+      });
+    }
   };
 
   // -------------------------------------------------------------------
@@ -965,16 +1121,29 @@ export default function App() {
   // 1. Mark a notification as read
   const handleMarkNotificationAsRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    if (isSupabaseConfigured && isUUID(id)) {
+      supabase.from('notifications').update({ is_read: true }).eq('id', id).then(({ error }) => {
+        if (error) console.error("Error marking notification read:", error);
+      });
+    }
   };
 
   // 2. Mark all relevant notifications as read
   const handleMarkAllNotificationsAsRead = () => {
+    const idsToMark = notifications
+      .filter(n => (!n.targetUserId || n.targetUserId === currentUser.id) && !n.isRead && isUUID(n.id))
+      .map(n => n.id);
     setNotifications(prev => prev.map(n => {
       if (!n.targetUserId || n.targetUserId === currentUser.id) {
         return { ...n, isRead: true };
       }
       return n;
     }));
+    if (isSupabaseConfigured && idsToMark.length > 0) {
+      supabase.from('notifications').update({ is_read: true }).in('id', idsToMark).then(({ error }) => {
+        if (error) console.error("Error marking all notifications read:", error);
+      });
+    }
   };
 
   // 3. Clear all relevant notifications
@@ -990,18 +1159,43 @@ export default function App() {
     targetUserId?: string,
     linkToTab?: string
   ) => {
+    const tempId = `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const todayStr = getRealTodayStr();
     const newNotif: AppNotification = {
-      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: tempId,
       type,
       title,
       description,
-      date: getRealTodayStr(),
+      date: todayStr,
       isRead: false,
       targetUserId,
       linkToTab,
       timestamp: new Date().toISOString()
     };
     setNotifications(prev => [newNotif, ...prev]);
+
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
+      getSupabaseUserAndMessId(currentUser.id, users, currentUser).then(({ messId }) => {
+        if (!messId) return;
+        supabase.from('notifications').insert({
+          mess_id: messId,
+          type,
+          title,
+          description,
+          date: todayStr,
+          is_read: false,
+          target_user_id: targetUserId && isUUID(targetUserId) ? targetUserId : null,
+          link_to_tab: linkToTab || null,
+        }).select().then(({ data, error }) => {
+          if (data && data[0] && !error) {
+            const realId = String(data[0].id);
+            setNotifications(prev => prev.map(n => n.id === tempId ? { ...n, id: realId } : n));
+          } else if (error) {
+            console.error("Error inserting notification to Supabase:", error);
+          }
+        });
+      });
+    }
   };
 
   // 5. Trigger Meal Reminder callback
@@ -1316,27 +1510,49 @@ export default function App() {
     );
   };
 
-  // Update Meals (Syncs to Supabase)
+  // Update Meals (Syncs changed cells to Supabase with mess_id)
   const handleUpdateMeals = (updatedMeals: MemberMealSheet[]) => {
+    const prevMealsMap = new Map<string, MemberMealSheet['meals']>();
+    meals.forEach(s => prevMealsMap.set(s.userId, s.meals));
     setMeals(updatedMeals);
 
-    if (isSupabaseConfigured) {
-      updatedMeals.forEach(sheet => {
-        Object.keys(sheet.meals).forEach(dateStr => {
-          const dayMeal = sheet.meals[dateStr];
-          supabase.from('meals').upsert({
-            user_id: sheet.userId,
-            date: dateStr,
-            breakfast: dayMeal.breakfast,
-            lunch: dayMeal.lunch,
-            dinner: dayMeal.dinner,
-            guest_breakfast: dayMeal.guestBreakfast,
-            guest_lunch: dayMeal.guestLunch,
-            guest_dinner: dayMeal.guestDinner,
-            manager_adjustment: dayMeal.managerAdjustment || 0,
-            adjustment_reason: dayMeal.adjustmentReason || null
-          }, { onConflict: 'user_id,date' }).then(({ error }) => {
-            if (error) console.error("Error upserting meal to Supabase:", error);
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
+      getSupabaseUserAndMessId(currentUser.id, users, currentUser).then(({ messId }) => {
+        if (!messId) return;
+        updatedMeals.forEach(sheet => {
+          if (!isUUID(sheet.userId)) return;
+          const prevUserMeals = prevMealsMap.get(sheet.userId) || {};
+          Object.keys(sheet.meals).forEach(dateStr => {
+            const dayMeal = sheet.meals[dateStr];
+            const prevDay = prevUserMeals[dateStr];
+            const changed =
+              !prevDay ||
+              Boolean(prevDay.breakfast) !== Boolean(dayMeal.breakfast) ||
+              Boolean(prevDay.lunch) !== Boolean(dayMeal.lunch) ||
+              Boolean(prevDay.dinner) !== Boolean(dayMeal.dinner) ||
+              (prevDay.guestBreakfast || 0) !== (dayMeal.guestBreakfast || 0) ||
+              (prevDay.guestLunch || 0) !== (dayMeal.guestLunch || 0) ||
+              (prevDay.guestDinner || 0) !== (dayMeal.guestDinner || 0) ||
+              (prevDay.managerAdjustment || 0) !== (dayMeal.managerAdjustment || 0) ||
+              (prevDay.adjustmentReason || '') !== (dayMeal.adjustmentReason || '');
+
+            if (!changed) return;
+
+            supabase.from('meals').upsert({
+              mess_id: messId,
+              user_id: sheet.userId,
+              date: dateStr,
+              breakfast: Boolean(dayMeal.breakfast),
+              lunch: Boolean(dayMeal.lunch),
+              dinner: Boolean(dayMeal.dinner),
+              guest_breakfast: dayMeal.guestBreakfast || 0,
+              guest_lunch: dayMeal.guestLunch || 0,
+              guest_dinner: dayMeal.guestDinner || 0,
+              manager_adjustment: dayMeal.managerAdjustment || 0,
+              adjustment_reason: dayMeal.adjustmentReason || null
+            }, { onConflict: 'user_id,date' }).then(({ error }) => {
+              if (error) console.error("Error upserting meal to Supabase:", error);
+            });
           });
         });
       });
@@ -1365,20 +1581,16 @@ export default function App() {
     );
 
     if (newEntry.status === 'Pending') {
-      const newNotif: AppNotification = {
-        id: `notif-${Date.now()}`,
-        type: 'BazaarReminder',
-        title: `New Bazaar Claim: ${entry.items}`,
-        description: `${submitter} logged a bazaar expense of ${settings.currency}${entry.total || entry.subtotal || entry.price} for ${entry.items}. Awaiting manager verification.`,
-        date: entry.date,
-        isRead: false,
-        linkToTab: 'Bazaar',
-        timestamp: new Date().toISOString()
-      };
-      setNotifications(prev => [newNotif, ...prev]);
+      handleAddNotification(
+        'BazaarReminder',
+        `New Bazaar Claim: ${entry.items}`,
+        `${submitter} logged a bazaar expense of ${settings.currency}${entry.total || entry.subtotal || entry.price} for ${entry.items}. Awaiting manager verification.`,
+        undefined,
+        'Bazaar'
+      );
     }
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
       const targetUser = entry.assignedTo[0] || currentUser.id;
       getSupabaseUserAndMessId(targetUser, users, currentUser).then(async ({ userId: dbUserId, messId }) => {
         const payload: any = {
@@ -1389,7 +1601,7 @@ export default function App() {
           subtotal: entry.subtotal || entry.price,
           status: entry.status || 'Pending',
           user_id: dbUserId,
-          approved_by: entry.approvedBy || null,
+          approved_by: entry.approvedBy && isUUID(entry.approvedBy) ? entry.approvedBy : null,
           notes: entry.notes || null,
           receipt_url: entry.receiptUrl || null
         };
@@ -1516,20 +1728,16 @@ export default function App() {
     );
 
     if (deposit.status === 'Pending') {
-      const newNotif: AppNotification = {
-        id: `notif-${Date.now()}`,
-        type: 'DepositReminder',
-        title: `New Deposit Request: ${settings.currency}${deposit.amount}`,
-        description: `${memberName} submitted a deposit request of ${settings.currency}${deposit.amount} via ${deposit.method}. Awaiting manager review.`,
-        date: deposit.date,
-        isRead: false,
-        linkToTab: 'Deposits',
-        timestamp: new Date().toISOString()
-      };
-      setNotifications(prev => [newNotif, ...prev]);
+      handleAddNotification(
+        'DepositReminder',
+        `New Deposit Request: ${settings.currency}${deposit.amount}`,
+        `${memberName} submitted a deposit request of ${settings.currency}${deposit.amount} via ${deposit.method}. Awaiting manager review.`,
+        undefined,
+        'Deposits'
+      );
     }
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
       getSupabaseUserAndMessId(deposit.userId, users, currentUser).then(async ({ userId: dbUserId, messId }) => {
         const payload: any = {
           user_id: dbUserId,
@@ -1694,26 +1902,39 @@ export default function App() {
       );
     });
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
       getSupabaseUserAndMessId(currentUser.id, users, currentUser).then(async ({ userId: authorId, messId }) => {
-        const payload: any = {
+        if (!messId) return;
+        const basePayload: any = {
           title: notice.title,
           description: notice.description,
           priority: notice.priority,
           date: newNotice.date,
           author_id: authorId,
-          attachment: notice.attachment || null
+          attachment: notice.attachment || null,
+          mess_id: messId,
         };
-        if (messId) payload.mess_id = messId;
+        const fullPayload: any = {
+          ...basePayload,
+          expiry_date: notice.expiryDate || null,
+          is_pinned: Boolean(notice.isPinned),
+        };
 
-        supabase.from('notices').insert(payload).select().then(({ data, error }) => {
-          if (data && data[0] && !error) {
-            const realId = String(data[0].id);
+        const { data, error } = await supabase.from('notices').insert(fullPayload).select();
+        if (data && data[0] && !error) {
+          const realId = String(data[0].id);
+          setNotices(prev => prev.map(n => n.id === newNotice.id ? { ...n, id: realId } : n));
+        } else if (error && (error.message?.includes('column') || error.code === '42703')) {
+          const { data: fallbackData, error: fallbackErr } = await supabase.from('notices').insert(basePayload).select();
+          if (fallbackData && fallbackData[0] && !fallbackErr) {
+            const realId = String(fallbackData[0].id);
             setNotices(prev => prev.map(n => n.id === newNotice.id ? { ...n, id: realId } : n));
-          } else if (error) {
-            console.error("Error inserting notice to Supabase:", error);
+          } else if (fallbackErr) {
+            console.error("Error inserting notice to Supabase:", fallbackErr);
           }
-        });
+        } else if (error) {
+          console.error("Error inserting notice to Supabase:", error);
+        }
       });
     }
   };
@@ -1730,6 +1951,13 @@ export default function App() {
       `Title: ${target.title}, Priority: ${target.priority}, Author: ${target.authorName}`,
       'Notice completely deleted'
     );
+
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('notices').delete().eq('id', qId).then(({ error }) => {
+        if (error) console.error("Error deleting notice from Supabase:", error);
+      });
+    }
   };
 
   // Toggle Pin Notice
@@ -1745,6 +1973,13 @@ export default function App() {
       `isPinned: ${target.isPinned ? 'true' : 'false'}`,
       `isPinned: ${nextPinned ? 'true' : 'false'}`
     );
+
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
+      const qId = isNaN(Number(id)) ? id : Number(id);
+      supabase.from('notices').update({ is_pinned: nextPinned }).eq('id', qId).then(({ error }) => {
+        if (error) console.error("Error updating notice pin in Supabase:", error);
+      });
+    }
   };
 
   // Create User (Admin Only)
@@ -1993,10 +2228,12 @@ export default function App() {
       });
 
       setUsers(updatedUsers);
-      if (isSupabaseConfigured) {
+      if (isSupabaseConfigured && isUUID(currentUser?.id)) {
         updatedUsers.forEach(u => {
           if (isUUID(u.id)) {
-            supabase.from('users').update({ carry_forward: u.carryForward || 0 }).eq('id', u.id);
+            supabase.from('users').update({ carry_forward: u.carryForward || 0 }).eq('id', u.id).then(({ error }) => {
+              if (error) console.error("Error updating user carry_forward in Supabase:", error);
+            });
           }
         });
       }
@@ -2027,6 +2264,7 @@ export default function App() {
       closedMonths: nextClosedMonths
     };
     setSettings(nextSettings);
+    syncSettingsToSupabase(nextSettings);
 
     const prevLabel = formatMonthLabel(activeMonth, settings.language);
     const nextLabel = formatMonthLabel(nextMonth, settings.language);
@@ -2060,6 +2298,44 @@ export default function App() {
     );
   };
 
+  // Sync SystemSettings to Supabase (with graceful fallback if extended columns aren't migrated yet)
+  const syncSettingsToSupabase = (nextSettings: SystemSettings) => {
+    if (!isSupabaseConfigured || !isUUID(currentUser?.id)) return;
+    getSupabaseUserAndMessId(currentUser.id, users, currentUser).then(async ({ messId }) => {
+      if (!messId) return;
+      const basePayload = {
+        mess_id: messId,
+        system_name: nextSettings.systemName,
+        meal_lock_time: nextSettings.mealLockTime,
+        default_meal_on: nextSettings.defaultMealOn,
+        currency: nextSettings.currency,
+        guest_meal_limit: nextSettings.guestMealLimit,
+        is_month_closed: nextSettings.isMonthClosed,
+        language: nextSettings.language,
+        mgr_can_approve_bazaar: nextSettings.mgrCanApproveBazaar ?? true,
+        mgr_can_add_deposit: nextSettings.mgrCanAddDeposit ?? true,
+        mgr_can_add_expense: nextSettings.mgrCanAddExpense ?? true,
+        mgr_can_manage_users: nextSettings.mgrCanManageUsers ?? false,
+        mgr_can_publish_notice: nextSettings.mgrCanPublishNotice ?? true,
+      };
+      const fullPayload = {
+        ...basePayload,
+        active_month: nextSettings.activeMonth || getRealCurrentMonth(),
+        closed_months: nextSettings.closedMonths || [],
+        lock_override: nextSettings.lockOverride ?? false,
+        theme: nextSettings.theme || 'Light',
+      };
+
+      const { error } = await supabase.from('system_settings').upsert(fullPayload, { onConflict: 'mess_id' });
+      if (error && (error.message?.includes('column') || error.code === '42703')) {
+        const { error: fallbackErr } = await supabase.from('system_settings').upsert(basePayload, { onConflict: 'mess_id' });
+        if (fallbackErr) console.error("Error syncing settings to Supabase:", fallbackErr);
+      } else if (error) {
+        console.error("Error syncing settings to Supabase:", error);
+      }
+    });
+  };
+
   // Update Settings
   const handleUpdateSettings = (updatedSettings: SystemSettings) => {
     const wasClosed = settings.isMonthClosed;
@@ -2069,6 +2345,7 @@ export default function App() {
       ensureMealsForMonth(nextMonth);
     }
     setSettings(updatedSettings);
+    syncSettingsToSupabase(updatedSettings);
 
     const oldText = `Month: ${prevMonth}, Closed: ${settings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${settings.theme || 'Default'}, Lang: ${settings.language || 'English'}, LockTime: ${settings.mealLockTime}`;
     const newText = `Month: ${nextMonth}, Closed: ${updatedSettings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${updatedSettings.theme || 'Default'}, Lang: ${updatedSettings.language || 'English'}, LockTime: ${updatedSettings.mealLockTime}`;
@@ -2151,18 +2428,22 @@ export default function App() {
     setVacations(prev => [...prev, newVacation]);
     logAction('Vacation Scheduled', `Vacation registered for ${targetUser.name} from ${startDate} to ${endDate}. Meals are automatically marked OFF for these dates.`);
 
-    if (isSupabaseConfigured) {
-      supabase.from('vacation_periods').insert({
-        user_id: userId,
-        start_date: startDate,
-        end_date: endDate
-      }).select().then(({ data, error }) => {
-        if (data && data[0] && !error) {
-          const realId = String(data[0].id);
-          setVacations(prev => prev.map(v => v.id === tempId ? { ...v, id: realId } : v));
-        } else if (error) {
-          console.error("Error inserting vacation to Supabase:", error);
-        }
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
+      getSupabaseUserAndMessId(userId, users, currentUser).then(({ userId: dbUserId, messId }) => {
+        if (!messId || !isUUID(dbUserId)) return;
+        supabase.from('vacation_periods').insert({
+          mess_id: messId,
+          user_id: dbUserId,
+          start_date: startDate,
+          end_date: endDate
+        }).select().then(({ data, error }) => {
+          if (data && data[0] && !error) {
+            const realId = String(data[0].id);
+            setVacations(prev => prev.map(v => v.id === tempId ? { ...v, id: realId } : v));
+          } else if (error) {
+            console.error("Error inserting vacation to Supabase:", error);
+          }
+        });
       });
     }
   };
@@ -2187,18 +2468,20 @@ export default function App() {
     });
     logAction('Vacation Updated', `Updated vacation scheduled for ${targetUser?.name || 'User'} to ${startDate} to ${endDate}.`);
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
       const qId = isNaN(Number(id)) ? id : Number(id);
       supabase.from('vacation_periods').update({
         user_id: userId,
         start_date: startDate,
         end_date: endDate
-      }).eq('user_id', userId).then(({ error }) => {
+      }).eq('id', qId).then(({ error }) => {
         if (error) {
           supabase.from('vacation_periods').update({
             start_date: startDate,
             end_date: endDate
-          }).eq('id', qId);
+          }).eq('user_id', userId).then(({ error: err2 }) => {
+            if (err2) console.error("Error updating vacation in Supabase:", err2);
+          });
         }
       });
     }
@@ -2213,11 +2496,13 @@ export default function App() {
     setVacations(prev => prev.filter(v => String(v.id) !== String(id)));
     logAction('Vacation Cancelled', `Cancelled vacation scheduled for ${targetUser?.name || 'User'} (${target.startDate} to ${target.endDate}). Regular schedule resumes.`);
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
       const qId = isNaN(Number(id)) ? id : Number(id);
       supabase.from('vacation_periods').delete().eq('id', qId).then(({ error }) => {
         if (error) {
-          supabase.from('vacation_periods').delete().eq('user_id', target.userId);
+          supabase.from('vacation_periods').delete().eq('user_id', target.userId).then(({ error: err2 }) => {
+            if (err2) console.error("Error deleting vacation from Supabase:", err2);
+          });
         }
       });
     }
@@ -2348,10 +2633,12 @@ export default function App() {
             role={currentPersona}
             onUpdateUsers={(updatedUsers) => {
               setUsers(updatedUsers);
-              if (isSupabaseConfigured) {
+              if (isSupabaseConfigured && isUUID(currentUser?.id)) {
                 updatedUsers.forEach(u => {
                   if (isUUID(u.id)) {
-                    supabase.from('users').update({ carry_forward: u.carryForward || 0 }).eq('id', u.id);
+                    supabase.from('users').update({ carry_forward: u.carryForward || 0 }).eq('id', u.id).then(({ error }) => {
+                      if (error) console.error("Error updating user carry_forward from ReportsTab:", error);
+                    });
                   }
                 });
               }
