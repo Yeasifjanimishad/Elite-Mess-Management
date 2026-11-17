@@ -21,7 +21,9 @@ import {
   Info,
   ChevronRight,
   TrendingUp,
-  Check
+  Check,
+  Copy,
+  MessageCircle
 } from 'lucide-react';
 import {
   User,
@@ -710,6 +712,107 @@ export default function ReportsTab({
     return isBangla ? 'বকেয়া / দিবেন' : 'Due to Pay';
   };
 
+  const buildMemberBillSlipText = (row: (typeof memberReportRows)[number]) => {
+    const messTitle = settings.systemName || 'Mess Management System';
+    const absBal = Math.abs(row.balance).toFixed(2);
+    const statusText =
+      Math.abs(row.balance) < 0.01
+        ? isBangla
+          ? 'সমান (Settled)'
+          : 'Settled'
+        : row.balance > 0
+        ? isBangla
+          ? `পাবেন +${currency}${absBal}`
+          : `Refundable +${currency}${absBal}`
+        : isBangla
+        ? `বকেয়া (দিতে হবে) ${currency}${absBal}`
+        : `Payable Due ${currency}${absBal}`;
+
+    const paymentLines: string[] = [];
+    if (row.balance < -0.01) {
+      if (settings.bkashNumber?.trim()) {
+        paymentLines.push(`bKash: ${settings.bkashNumber.trim()}`);
+      }
+      if (settings.nagadNumber?.trim()) {
+        paymentLines.push(`Nagad: ${settings.nagadNumber.trim()}`);
+      }
+      if (settings.paymentNote?.trim()) {
+        paymentLines.push(`Note: ${settings.paymentNote.trim()}`);
+      }
+    }
+
+    if (isBangla) {
+      return [
+        `*${messTitle}* — মাসিক বিল স্লিপ (${selectedMonthLabel})`,
+        `সদস্য: ${row.name}`,
+        `নিজ মিল: ${row.ownMeals} | অতিথি মিল: ${row.guestMeals} | মোট মিল: ${row.totalMeals}`,
+        `মিল রেট: ${currency}${currentMealRate.toFixed(2)}`,
+        `মোট মিল বিল: ${currency}${row.billAmount.toFixed(2)}`,
+        `আগের জের: ${row.carryForward >= 0 ? '+' : '-'}${currency}${Math.abs(row.carryForward).toFixed(2)}`,
+        `চলতি মাসের জমা: ${currency}${row.deposits.toFixed(2)}`,
+        `চূড়ান্ত হিসাব: ${statusText}`,
+        ...(paymentLines.length > 0 ? ['', ...paymentLines] : []),
+      ].join('\n');
+    }
+
+    return [
+      `*${messTitle}* — Monthly Bill Slip (${selectedMonthLabel})`,
+      `Member: ${row.name}`,
+      `Meals: ${row.totalMeals} (Own ${row.ownMeals} + Guest ${row.guestMeals})`,
+      `Meal Rate: ${currency}${currentMealRate.toFixed(2)}`,
+      `Meal Bill: ${currency}${row.billAmount.toFixed(2)}`,
+      `Prev. Carry Forward: ${row.carryForward >= 0 ? '+' : '-'}${currency}${Math.abs(row.carryForward).toFixed(2)}`,
+      `Month Deposits: ${currency}${row.deposits.toFixed(2)}`,
+      `Net Balance: ${statusText}`,
+      ...(paymentLines.length > 0 ? ['', ...paymentLines] : []),
+    ].join('\n');
+  };
+
+  const buildWhatsAppUrl = (phone: string | undefined, text: string) => {
+    const digits = (phone || '').replace(/\D/g, '');
+    let normalized = digits;
+    if (digits.startsWith('01') && digits.length === 11) {
+      normalized = `88${digits}`;
+    }
+    const encoded = encodeURIComponent(text);
+    return normalized.length >= 10
+      ? `https://wa.me/${normalized}?text=${encoded}`
+      : `https://wa.me/?text=${encoded}`;
+  };
+
+  const handleCopyBillSlip = async (
+    row: (typeof memberReportRows)[number],
+    e?: React.MouseEvent
+  ) => {
+    e?.stopPropagation();
+    const slip = buildMemberBillSlipText(row);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(slip);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = slip;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast(
+        isBangla
+          ? `${row.name}-এর মাসিক বিল স্লিপ কপি হয়েছে!`
+          : `Copied ${row.name}'s bill slip to clipboard!`,
+        'success'
+      );
+    } catch {
+      showToast(
+        isBangla ? 'স্লিপ কপি করা যায়নি।' : 'Could not copy bill slip.',
+        'error'
+      );
+    }
+  };
+
   const totalGuestMealsSum = memberReportRows.reduce((s, r) => s + r.guestMeals, 0);
 
   return (
@@ -1275,6 +1378,7 @@ export default function ReportsTab({
                     <th className="px-3 py-3 text-center">{isBangla ? 'মোট বিল' : 'Meal Bill'}</th>
                     <th className="px-4 py-3 text-center">{isBangla ? 'চূড়ান্ত হিসাব' : 'Net Balance'}</th>
                     <th className="px-4 py-3 text-center">{isBangla ? 'অবস্থা' : 'Status'}</th>
+                    <th className="px-3 py-3 text-center no-print">{isBangla ? 'বিল স্লিপ' : 'Slip'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -1376,13 +1480,39 @@ export default function ReportsTab({
                             {getBalanceStatusLabel(row.balance)}
                           </span>
                         </td>
+
+                        <td
+                          className="px-3 py-3.5 text-center no-print"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <div className="inline-flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={e => handleCopyBillSlip(row, e)}
+                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                              title={isBangla ? 'বিল স্লিপ কপি করুন' : 'Copy bill slip'}
+                            >
+                              <Copy size={13} />
+                            </button>
+                            <a
+                              href={buildWhatsAppUrl(row.phone, buildMemberBillSlipText(row))}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 transition"
+                              title={isBangla ? 'হোয়াটসঅ্যাপে পাঠান' : 'Send via WhatsApp'}
+                            >
+                              <MessageCircle size={13} />
+                            </a>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
 
                   {filteredRows.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-xs text-slate-400">
+                      <td colSpan={10} className="py-12 text-center text-xs text-slate-400">
                         {isBangla ? 'কোনো সদস্য পাওয়া যায়নি।' : 'No members match your search.'}
                       </td>
                     </tr>
@@ -1422,6 +1552,7 @@ export default function ReportsTab({
                       <td className="px-4 py-3 text-center text-[10px] text-slate-400">
                         {filteredRows.length} {isBangla ? 'জন' : 'members'}
                       </td>
+                      <td className="px-3 py-3 no-print" />
                     </tr>
                   </tfoot>
                 )}
@@ -1566,6 +1697,44 @@ export default function ReportsTab({
         {/* TAB 4: USER LEDGER */}
         {activeTab === 'User' && selectedUserRow && (
           <div className="space-y-5">
+            {/* QUICK SHARE BILL SLIP ACTION BAR */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
+              <div className="text-xs">
+                <span className="font-extrabold text-slate-900 dark:text-white block">
+                  {isBangla
+                    ? `${selectedUserRow.name}-এর মাসিক বিল স্লিপ শেয়ার করুন`
+                    : `Share ${selectedUserRow.name}'s Monthly Bill Slip`}
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {isBangla
+                    ? 'এক ক্লিকে সম্পূর্ণ মিল ও বকেয়া হিসাব কপি করুন অথবা সরাসরি হোয়াটসঅ্যাপে পাঠান।'
+                    : 'Copy formatted monthly settlement summary or send directly via WhatsApp.'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleCopyBillSlip(selectedUserRow)}
+                  className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5 cursor-pointer transition"
+                >
+                  <Copy size={14} />
+                  <span>{isBangla ? 'বিল স্লিপ কপি' : 'Copy Bill Slip'}</span>
+                </button>
+                <a
+                  href={buildWhatsAppUrl(
+                    selectedUserRow.phone,
+                    buildMemberBillSlipText(selectedUserRow)
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5 transition shadow-xs"
+                >
+                  <MessageCircle size={14} />
+                  <span>{isBangla ? 'হোয়াটসঅ্যাপে পাঠান' : 'Send on WhatsApp'}</span>
+                </a>
+              </div>
+            </div>
+
             {/* USER PROFILE SUMMARY CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {/* Profile card */}

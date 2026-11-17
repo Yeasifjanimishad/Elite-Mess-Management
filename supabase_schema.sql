@@ -214,6 +214,9 @@ CREATE TABLE system_settings (
     mgr_can_manage_users BOOLEAN DEFAULT TRUE NOT NULL,
     mgr_can_publish_notice BOOLEAN DEFAULT TRUE NOT NULL,
     assigned_bazaar_persons JSONB DEFAULT '[]'::jsonb NOT NULL,
+    bkash_number TEXT DEFAULT '' NOT NULL,
+    nagad_number TEXT DEFAULT '' NOT NULL,
+    payment_note TEXT DEFAULT '' NOT NULL,
     PRIMARY KEY (mess_id)
 );
 

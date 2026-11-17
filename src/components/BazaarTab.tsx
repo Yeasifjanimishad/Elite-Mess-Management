@@ -21,7 +21,9 @@ import {
   AlertTriangle,
   Upload,
   Camera,
-  RefreshCw
+  RefreshCw,
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserType, BazaarEntry, SystemSettings } from '../types';
@@ -173,6 +175,39 @@ export default function BazaarTab({
     }
   };
 
+  const handleAutoRotateBazaarDuty = () => {
+    const activePool = allUsers.filter(u => u.isActive);
+    if (activePool.length === 0) return;
+
+    const currentValidIds = validAssignedBuyers.map(u => u.id);
+    const rotateCount = Math.max(1, Math.min(currentValidIds.length || 1, activePool.length));
+
+    let lastIndex = -1;
+    if (currentValidIds.length > 0) {
+      const lastId = currentValidIds[currentValidIds.length - 1];
+      lastIndex = activePool.findIndex(u => u.id === lastId);
+    }
+
+    const nextIds: string[] = [];
+    for (let i = 0; i < rotateCount; i++) {
+      const nextIdx = (lastIndex + 1 + i) % activePool.length;
+      nextIds.push(activePool[nextIdx].id);
+    }
+
+    const nextNames = nextIds
+      .map(id => activePool.find(u => u.id === id)?.name)
+      .filter(Boolean)
+      .join(', ');
+
+    onUpdateAssignedPersons(nextIds);
+    showToast(
+      isBangla
+        ? `স্মার্ট রোটেশন সম্পন্ন: পরবর্তী বাজারের দায়িত্ব পেলেন ${nextNames}`
+        : `Rotated bazaar duty to next member(s): ${nextNames}`,
+      'success'
+    );
+  };
+
   // Buyer Assignment Toggle State
   const [isEditingDuty, setIsEditingDuty] = useState(false);
   const [tempDuties, setTempDuties] = useState<string[]>(assignedBazaarPersons);
@@ -229,9 +264,10 @@ export default function BazaarTab({
     }
   }, [today, editEntry]);
 
-  // Receipt image zoom popup, upload & live camera capture state
+  // Receipt image zoom popup, upload, live camera capture & AI scan state
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
   const [isStartingCamera, setIsStartingCamera] = useState(false);
@@ -420,6 +456,68 @@ export default function BazaarTab({
     }
   };
 
+  const handleScanReceiptWithAI = async () => {
+    if (!formData.receiptUrl || isScanningReceipt) return;
+    setIsScanningReceipt(true);
+    try {
+      const resp = await fetch('/api/scan-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageDataUrl: formData.receiptUrl,
+          language: settings.language,
+        }),
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok || !payload?.success || !payload?.data) {
+        throw new Error(payload?.error || `Scan failed (HTTP ${resp.status})`);
+      }
+
+      const scanned = payload.data as {
+        items?: string;
+        quantity?: number;
+        unit?: string;
+        price?: number;
+        total?: number;
+        notes?: string;
+      };
+
+      const allowedUnits = ['kg', 'Liter', 'pcs', 'Dozen', 'Packets', 'Bags', 'Other'];
+      const nextUnit = scanned.unit && allowedUnits.includes(scanned.unit) ? scanned.unit : formData.unit || 'kg';
+      const nextQty = Number(scanned.quantity) > 0 ? String(scanned.quantity) : '1';
+      const nextPrice = Number(scanned.price) > 0 ? String(scanned.price) : formData.price;
+      const subtotalEst = Number(nextQty) * Number(nextPrice || 0);
+      const nextTotal =
+        Number(scanned.total) > 0 && Math.abs(Number(scanned.total) - subtotalEst) > 0.5
+          ? String(scanned.total)
+          : '';
+
+      setFormData(prev => ({
+        ...prev,
+        items: scanned.items || prev.items,
+        quantity: nextQty,
+        unit: nextUnit,
+        price: nextPrice || (Number(scanned.total) > 0 ? String(scanned.total) : prev.price),
+        totalOverride: nextTotal,
+        notes: scanned.notes || prev.notes,
+      }));
+
+      showToast(
+        isBangla
+          ? 'AI রসিদ স্ক্যান সম্পন্ন হয়েছে! তথ্যগুলো যাচাই করে সেভ করুন।'
+          : 'AI receipt scan complete! Please review the auto-filled fields.',
+        'success'
+      );
+    } catch (err: any) {
+      showToast(
+        err?.message || (isBangla ? 'AI রসিদ স্ক্যান ব্যর্থ হয়েছে।' : 'Failed to scan receipt with AI.'),
+        'error'
+      );
+    } finally {
+      setIsScanningReceipt(false);
+    }
+  };
+
   const isAssignedToBazaar = assignedBazaarPersons.includes(currentUser.id);
   const canAddBazaar = true;
 
@@ -580,7 +678,16 @@ export default function BazaarTab({
           {isManagerOrAdmin && (
             <div>
               {!isEditingDuty ? (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAutoRotateBazaarDuty}
+                    className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold rounded-lg cursor-pointer transition flex items-center gap-1.5"
+                    title={isBangla ? 'স্বয়ংক্রিয়ভাবে পরবর্তী সদস্যদের বাজারের দায়িত্ব দিন' : 'Automatically rotate duty to the next active member(s)'}
+                  >
+                    <RefreshCw size={12} />
+                    <span>{isBangla ? 'অটো রোটেশন' : 'Auto-Rotate'}</span>
+                  </button>
                   <button
                     onClick={handleTriggerReminderClick}
                     className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 border border-amber-600 hover:border-amber-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer transition flex items-center gap-1 shadow-sm"
@@ -1209,9 +1316,9 @@ export default function BazaarTab({
                     </label>
                   </div>
 
-                  {/* Preview of attached receipt */}
+                  {/* Preview of attached receipt + AI Scan trigger */}
                   {formData.receiptUrl && (
-                    <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2 flex items-center gap-3">
+                    <div className="relative rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2.5 flex items-center gap-3">
                       <img
                         src={formData.receiptUrl}
                         alt="Receipt preview"
@@ -1219,19 +1326,39 @@ export default function BazaarTab({
                         className="w-16 h-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700 cursor-pointer shrink-0"
                         referrerPolicy="no-referrer"
                       />
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
                           {formData.receiptUrl.startsWith('data:image')
                             ? (isBangla ? 'আপলোড করা রসিদের ছবি' : 'Uploaded receipt photo')
                             : (isBangla ? 'সংযুক্ত রসিদ ছবি' : 'Attached receipt image')}
                         </p>
-                        <button
-                          type="button"
-                          onClick={() => setViewingReceipt(formData.receiptUrl)}
-                          className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer mt-0.5"
-                        >
-                          {isBangla ? 'বড় করে দেখুন' : 'Click to preview'}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleScanReceiptWithAI}
+                            disabled={isScanningReceipt}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-[10px] font-extrabold cursor-pointer transition shadow-xs"
+                          >
+                            {isScanningReceipt ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin" />
+                                <span>{isBangla ? 'AI স্ক্যান হচ্ছে...' : 'Scanning...'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles size={12} />
+                                <span>{isBangla ? 'AI রসিদ স্ক্যান (Auto-Fill)' : 'AI Scan Receipt'}</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setViewingReceipt(formData.receiptUrl)}
+                            className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                          >
+                            {isBangla ? 'বড় করে দেখুন' : 'Preview'}
+                          </button>
+                        </div>
                       </div>
                       <button
                         type="button"

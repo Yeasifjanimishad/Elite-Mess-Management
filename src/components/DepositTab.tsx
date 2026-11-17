@@ -21,7 +21,9 @@ import {
   Clock,
   ArrowDownRight,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Smartphone
 } from 'lucide-react';
 import { User as UserType, Deposit, SystemSettings, MemberMealSheet, BazaarEntry, Expense } from '../types';
 import { motion } from 'motion/react';
@@ -253,6 +255,42 @@ export default function DepositTab({
     }
   };
 
+  const handleOpenQuickPayModal = (method: 'bKash' | 'Nagad', dueAmount: number) => {
+    setDuplicateWarning(null);
+    setFormData({
+      userId: currentUser.id,
+      amount: dueAmount > 0 ? String(Math.ceil(dueAmount)) : '',
+      date: today,
+      method,
+      transactionId: '',
+      note: isBangla ? `${method} পেমেন্ট` : `${method} settlement`,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleCopyPaymentNumber = async (label: string, num: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(num);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = num;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast(
+        isBangla ? `${label} নম্বর (${num}) কপি হয়েছে!` : `Copied ${label} number (${num})!`,
+        'success'
+      );
+    } catch {
+      showToast(isBangla ? 'নম্বর কপি করা যায়নি।' : 'Could not copy number.', 'error');
+    }
+  };
+
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setDuplicateWarning(null);
@@ -439,6 +477,122 @@ export default function DepositTab({
         </div>
 
       </div>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* BKASH / NAGAD PAY-INFO & PERSONAL DUE BANNER */}
+      {/* ------------------------------------------------------------------- */}
+      {(() => {
+        const myBalance = getUserCurrentBalance(currentUser.id);
+        const myDue = myBalance < -0.01 ? Math.abs(myBalance) : 0;
+        const bkashNum = settings.bkashNumber?.trim() || '';
+        const nagadNum = settings.nagadNumber?.trim() || '';
+        const fallbackManagerPhone =
+          allUsers.find(
+            u => u.isActive && (u.role === 'Admin' || u.role === 'Meal Manager') && u.phone
+          )?.phone || '';
+
+        if (myDue <= 0 && !bkashNum && !nagadNum) return null;
+
+        return (
+          <div
+            className={`rounded-2xl p-4 sm:p-5 border flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+              myDue > 0
+                ? 'bg-rose-500/10 border-rose-500/25'
+                : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-xs'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`p-2.5 rounded-xl shrink-0 ${
+                  myDue > 0
+                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                    : 'bg-pink-500/10 text-pink-600 dark:text-pink-400'
+                }`}
+              >
+                <Smartphone size={20} />
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                    {myDue > 0
+                      ? isBangla
+                        ? `আপনার বকেয়া: ${settings.currency}${myDue.toFixed(2)}`
+                        : `Your Outstanding Due: ${settings.currency}${myDue.toFixed(2)}`
+                      : isBangla
+                      ? 'মেস পেমেন্ট নম্বর (বিকাশ / নগদ)'
+                      : 'Mess Mobile Payment Info (bKash / Nagad)'}
+                  </h3>
+                  {myDue <= 0 && (
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-extrabold">
+                      {isBangla ? 'হিসাব পরিষ্কার' : 'No Due'}
+                    </span>
+                  )}
+                </div>
+
+                {settings.paymentNote?.trim() && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {settings.paymentNote.trim()}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {bkashNum && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyPaymentNumber('bKash', bkashNum)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/25 text-pink-700 dark:text-pink-300 text-xs font-bold font-mono cursor-pointer transition"
+                    >
+                      <span>bKash: {bkashNum}</span>
+                      <Copy size={12} />
+                    </button>
+                  )}
+                  {nagadNum && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyPaymentNumber('Nagad', nagadNum)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/25 text-orange-700 dark:text-orange-300 text-xs font-bold font-mono cursor-pointer transition"
+                    >
+                      <span>Nagad: {nagadNum}</span>
+                      <Copy size={12} />
+                    </button>
+                  )}
+                  {!bkashNum && !nagadNum && fallbackManagerPhone && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyPaymentNumber('Manager', fallbackManagerPhone)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold font-mono cursor-pointer transition"
+                    >
+                      <span>{isBangla ? 'ম্যানেজার:' : 'Manager:'} {fallbackManagerPhone}</span>
+                      <Copy size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {!settings.isMonthClosed && (
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleOpenQuickPayModal('bKash', myDue)}
+                  className="px-3.5 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+                >
+                  <CreditCard size={14} />
+                  <span>{isBangla ? 'bKash জমা' : 'Pay via bKash'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenQuickPayModal('Nagad', myDue)}
+                  className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+                >
+                  <CreditCard size={14} />
+                  <span>{isBangla ? 'Nagad জমা' : 'Pay via Nagad'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ------------------------------------------------------------------- */}
       {/* PENDING APPROVAL QUEUE (ONLY FOR MANAGER) */}

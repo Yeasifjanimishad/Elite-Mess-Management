@@ -134,6 +134,9 @@ export interface SystemSettings {
   mgrCanManageUsers?: boolean;
   mgrCanPublishNotice?: boolean;
   assignedBazaarPersons?: string[];
+  bkashNumber?: string;
+  nagadNumber?: string;
+  paymentNote?: string;
 }
 
 export interface VacationPeriod {

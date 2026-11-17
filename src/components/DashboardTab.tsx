@@ -19,7 +19,9 @@ import {
   Clock,
   Award,
   BarChart3,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Copy,
+  Smartphone
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -316,6 +318,36 @@ export default function DashboardTab({
     : null;
   const userCarryForward = currentUser.carryForward || 0;
   const userCurrentBalance = userCarryForward + userTotalDeposits - userEstimatedBill;
+
+  const bkashNumber = settings.bkashNumber?.trim() || '';
+  const nagadNumber = settings.nagadNumber?.trim() || '';
+  const fallbackManagerPhone =
+    allUsers.find(
+      u => u.isActive && (u.role === 'Admin' || u.role === 'Meal Manager') && u.phone
+    )?.phone || '';
+
+  const handleCopyPaymentNumber = async (label: string, num: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(num);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = num;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast(
+        isBangla ? `${label} নম্বর (${num}) কপি হয়েছে!` : `Copied ${label} number (${num})!`,
+        'success'
+      );
+    } catch {
+      showToast(isBangla ? 'নম্বর কপি করা যায়নি।' : 'Could not copy number.', 'error');
+    }
+  };
 
   // TOMORROW MEAL RESERVATION STATUS
   const [selectedMemberId, setSelectedMemberId] = useState<string>(currentUser.id);
@@ -782,6 +814,80 @@ export default function DashboardTab({
             </p>
           </div>
 
+        </div>
+      )}
+
+      {/* QUICK DUE BALANCE & BKASH/NAGAD PAY-INFO BANNER */}
+      {userCurrentBalance < -0.01 && (
+        <div className="bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-pink-500/10 border border-rose-500/25 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 shrink-0">
+              <Smartphone size={20} />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  {isBangla
+                    ? `আপনার বকেয়া রয়েছে: ${settings.currency}${Math.abs(userCurrentBalance).toFixed(2)}`
+                    : `Outstanding Due: ${settings.currency}${Math.abs(userCurrentBalance).toFixed(2)}`}
+                </h3>
+                <span className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-700 dark:text-rose-300 text-[10px] font-extrabold uppercase">
+                  {isBangla ? 'দ্রুত পরিশোধ' : 'Quick Pay'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                {settings.paymentNote?.trim()
+                  ? settings.paymentNote.trim()
+                  : isBangla
+                  ? 'নিচের নম্বরে টাকা পাঠিয়ে ডিপোজিট রিকোয়েস্ট জমা দিন।'
+                  : 'Send money to the mess account below and submit your transaction ID.'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {bkashNumber && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPaymentNumber('bKash', bkashNumber)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-600/10 hover:bg-pink-600/20 border border-pink-500/25 text-pink-700 dark:text-pink-300 text-xs font-bold font-mono cursor-pointer transition"
+                    title={isBangla ? 'বিকাশ নম্বর কপি করুন' : 'Copy bKash number'}
+                  >
+                    <span>bKash: {bkashNumber}</span>
+                    <Copy size={12} />
+                  </button>
+                )}
+                {nagadNumber && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPaymentNumber('Nagad', nagadNumber)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/25 text-orange-700 dark:text-orange-300 text-xs font-bold font-mono cursor-pointer transition"
+                    title={isBangla ? 'নগদ নম্বর কপি করুন' : 'Copy Nagad number'}
+                  >
+                    <span>Nagad: {nagadNumber}</span>
+                    <Copy size={12} />
+                  </button>
+                )}
+                {!bkashNumber && !nagadNumber && fallbackManagerPhone && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPaymentNumber('Manager', fallbackManagerPhone)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold font-mono cursor-pointer transition"
+                  >
+                    <span>{isBangla ? 'ম্যানেজার:' : 'Manager:'} {fallbackManagerPhone}</span>
+                    <Copy size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => (onNavigateTab ? onNavigateTab('Deposits') : onQuickAction('deposit'))}
+            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer transition shrink-0 shadow-sm"
+          >
+            <Coins size={15} />
+            <span>{isBangla ? 'ডিপোজিট জমা দিন' : 'Submit Deposit'}</span>
+            <ArrowRight size={14} />
+          </button>
         </div>
       )}
 

@@ -460,6 +460,9 @@ export default function App() {
             mgrCanManageUsers: dbSettings.mgr_can_manage_users ?? prev.mgrCanManageUsers,
             mgrCanPublishNotice: dbSettings.mgr_can_publish_notice ?? prev.mgrCanPublishNotice,
             assignedBazaarPersons: syncedAssigned ?? prev.assignedBazaarPersons,
+            bkashNumber: dbSettings.bkash_number ?? prev.bkashNumber ?? '',
+            nagadNumber: dbSettings.nagad_number ?? prev.nagadNumber ?? '',
+            paymentNote: dbSettings.payment_note ?? prev.paymentNote ?? '',
           }));
         }
 
@@ -2410,6 +2413,9 @@ export default function App() {
         lock_override: nextSettings.lockOverride ?? false,
         theme: nextSettings.theme || 'Light',
         assigned_bazaar_persons: nextSettings.assignedBazaarPersons ?? assignedBazaarPersons,
+        bkash_number: nextSettings.bkashNumber ?? '',
+        nagad_number: nextSettings.nagadNumber ?? '',
+        payment_note: nextSettings.paymentNote ?? '',
       };
 
       const { error } = await supabase.from('system_settings').upsert(fullPayload, { onConflict: 'mess_id' });
@@ -2423,6 +2429,9 @@ export default function App() {
           lock_override: nextSettings.lockOverride ?? false,
           theme: nextSettings.theme || 'Light',
           assigned_bazaar_persons: nextSettings.assignedBazaarPersons ?? assignedBazaarPersons,
+          bkash_number: nextSettings.bkashNumber ?? '',
+          nagad_number: nextSettings.nagadNumber ?? '',
+          payment_note: nextSettings.paymentNote ?? '',
         };
         for (const [col, val] of Object.entries(extendedCols)) {
           await supabase.from('system_settings').update({ [col]: val }).eq('mess_id', messId);

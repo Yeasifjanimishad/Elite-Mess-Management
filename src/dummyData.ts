@@ -92,6 +92,9 @@ export const initialSettings: SystemSettings = {
   mgrCanAddExpense: true,
   mgrCanManageUsers: false,
   mgrCanPublishNotice: true,
+  bkashNumber: '',
+  nagadNumber: '',
+  paymentNote: '',
 };
 
 // Clean initial meals (unmarked dates defer to defaultMealOn policy for today/tomorrow)

@@ -19,7 +19,8 @@ import {
   CreditCard,
   Sliders,
   Calendar,
-  ArrowRight
+  ArrowRight,
+  Smartphone
 } from 'lucide-react';
 import { SystemSettings, UserRole } from '../types';
 import {
@@ -140,6 +141,9 @@ export default function SettingsTab({
       'mgrCanAddExpense',
       'mgrCanManageUsers',
       'mgrCanPublishNotice',
+      'bkashNumber',
+      'nagadNumber',
+      'paymentNote',
     ];
 
     const hasChanges = keysToCompare.some((k) => formData[k] !== settings[k]);
@@ -509,6 +513,67 @@ export default function SettingsTab({
                     </span>
                   </div>
                 </label>
+              </div>
+
+              {/* MESS PAYMENT NUMBERS (bKash / Nagad) */}
+              <div className="p-4 border border-slate-100 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Smartphone size={15} className="text-pink-600 dark:text-pink-400" />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      {isBangla ? 'মেস পেমেন্ট নম্বর (বিকাশ / নগদ)' : 'Mess Payment Numbers (bKash / Nagad)'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">
+                      {isBangla
+                        ? 'বকেয়া মেম্বারদের ড্যাশবোর্ড ও ডিপোজিট পেজে এই নম্বরগুলো দ্রুত কপি করার জন্য দেখাবে।'
+                        : 'Shown on member due banners and Deposit tab for one-click payment.'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      {isBangla ? 'বিকাশ নম্বর' : 'bKash Number'}
+                    </label>
+                    <input
+                      type="text"
+                      disabled={!isAdmin}
+                      placeholder="e.g. 017XXXXXXXX"
+                      value={formData.bkashNumber || ''}
+                      onChange={(e) => handleChange('bkashNumber', e.target.value)}
+                      className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      {isBangla ? 'নগদ নম্বর' : 'Nagad Number'}
+                    </label>
+                    <input
+                      type="text"
+                      disabled={!isAdmin}
+                      placeholder="e.g. 018XXXXXXXX"
+                      value={formData.nagadNumber || ''}
+                      onChange={(e) => handleChange('nagadNumber', e.target.value)}
+                      className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                      {isBangla ? 'পেমেন্ট নোট / রেফারেন্স' : 'Payment Instruction / Note'}
+                    </label>
+                    <input
+                      type="text"
+                      disabled={!isAdmin}
+                      placeholder={isBangla ? 'যেমন: Send Money + রেফারেন্সে নাম' : 'e.g. Send Money + add name in ref'}
+                      value={formData.paymentNote || ''}
+                      onChange={(e) => handleChange('paymentNote', e.target.value)}
+                      className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* SUBMIT BUTTON */}
