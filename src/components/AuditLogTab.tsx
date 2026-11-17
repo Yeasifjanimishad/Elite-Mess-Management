@@ -17,6 +17,7 @@ import {
   Info
 } from 'lucide-react';
 import { ActivityLog } from '../types';
+import { getRealTodayStr } from '../utils/dateUtils';
 
 interface AuditLogTabProps {
   activities: ActivityLog[];
@@ -152,7 +153,7 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
             <SlidersHorizontal size={14} /> Audit Trail Search Controls
           </h3>
           <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/35 font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-            <Network size={10} className="animate-pulse" /> Live Tracking Active
+            <Network size={10} /> Live Tracking Active
           </span>
         </div>
 
@@ -165,7 +166,7 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
               placeholder="Search by name, action details, IP, old/new states..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/70 border border-slate-150 dark:border-slate-700/80 rounded-xl text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
+              className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 rounded-xl text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
             />
           </div>
 
@@ -175,7 +176,7 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
             <select
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
-              className="w-full text-xs bg-slate-50 dark:bg-slate-800/70 text-slate-750 dark:text-slate-350 border border-slate-150 dark:border-slate-700/80 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold transition"
+              className="w-full text-xs bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold transition"
             >
               <option value="All">All Operations</option>
               {auditActions.map(action => (
@@ -190,7 +191,7 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
             <select
               value={userFilter}
               onChange={(e) => setUserFilter(e.target.value)}
-              className="w-full text-xs bg-slate-50 dark:bg-slate-800/70 text-slate-750 dark:text-slate-350 border border-slate-150 dark:border-slate-700/80 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold transition"
+              className="w-full text-xs bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/80 rounded-xl p-2.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold transition"
             >
               <option value="All">All Users</option>
               {uniqueUsers.map(u => (
@@ -222,7 +223,7 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
           
           {filteredActivities.map((log) => {
             const isExpanded = expandedLogId === log.id;
-            const fallbackDateStr = log.timestamp ? log.timestamp.split('T')[0] : '2026-07-18';
+            const fallbackDateStr = log.timestamp ? log.timestamp.split('T')[0] : getRealTodayStr();
             const fallbackTimeStr = log.timestamp ? log.timestamp.split('T')[1]?.slice(0, 8) || '00:00:00' : '00:00:00';
             
             const displayDate = log.date || fallbackDateStr;
@@ -246,7 +247,7 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
 
                   {/* Log description & User */}
                   <div className="flex-1 space-y-1">
-                    <p className="text-xs text-slate-750 dark:text-slate-300">
+                    <p className="text-xs text-slate-700 dark:text-slate-300">
                       <span className="font-extrabold text-slate-900 dark:text-white mr-1.5">{log.userName}</span>
                       {log.details}
                     </p>
@@ -254,18 +255,18 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
                     {/* Footnote details: Device, IP, DateTime */}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-slate-400 dark:text-slate-500 font-semibold">
                       <span className="flex items-center gap-1">
-                        <Clock size={11} className="text-slate-350 dark:text-slate-650" />
+                        <Clock size={11} className="text-slate-300 dark:text-slate-600" />
                         {displayDate} at {displayTime}
                       </span>
                       {log.ipAddress && (
                         <span className="flex items-center gap-1 font-mono">
-                          <Network size={11} className="text-slate-350 dark:text-slate-650" />
+                          <Network size={11} className="text-slate-300 dark:text-slate-600" />
                           {log.ipAddress}
                         </span>
                       )}
                       {log.device && (
                         <span className="flex items-center gap-1">
-                          <Smartphone size={11} className="text-slate-350 dark:text-slate-650" />
+                          <Smartphone size={11} className="text-slate-300 dark:text-slate-600" />
                           {log.device}
                         </span>
                       )}
@@ -316,7 +317,7 @@ export default function AuditLogTab({ activities }: AuditLogTabProps) {
                     </div>
 
                     {/* Metadata Context Infotip */}
-                    <div className="bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-800/60 flex items-start gap-2.5 text-[10px] text-slate-450 dark:text-slate-400">
+                    <div className="bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-800/60 flex items-start gap-2.5 text-[10px] text-slate-400 dark:text-slate-400">
                       <Info size={14} className="text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
                       <div>
                         <span className="font-bold">Security Footprint:</span> Action recorded securely by the ledger core. Access credentials: 

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Notice, User as UserType, SystemSettings } from '../types';
 import { useFeedback } from './FeedbackContext';
+import { getRealCurrentMonth, getEffectiveDatesForMonth } from '../utils/dateUtils';
 
 interface NoticeBoardTabProps {
   currentUser: UserType;
@@ -43,7 +44,8 @@ export default function NoticeBoardTab({
 
   const isManagerOrAdmin = role === 'Admin' || (role === 'Meal Manager' && settings.mgrCanPublishNotice !== false);
   const isBangla = settings.language === 'Bangla';
-  const today = '2026-07-18'; // current system date
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+  const { today } = getEffectiveDatesForMonth(activeMonth);
 
   // State
   const [searchQuery, setSearchQuery] = useState('');
@@ -141,7 +143,7 @@ export default function NoticeBoardTab({
                 onClick={() => setPriorityFilter(p)}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
                   priorityFilter === p 
-                    ? 'bg-white dark:bg-slate-700 text-slate-850 dark:text-white shadow-xs' 
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' 
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
                 }`}
               >
@@ -209,7 +211,7 @@ export default function NoticeBoardTab({
                 <div className="flex justify-between items-center gap-4">
                   <div className="flex items-center gap-2">
                     {notice.isPinned && (
-                      <span className="flex items-center gap-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-indigo-500/20 animate-pulse">
+                      <span className="flex items-center gap-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border border-indigo-500/20">
                         <Pin size={10} className="fill-indigo-500" /> {isBangla ? 'পিন্ড' : 'Pinned'}
                       </span>
                     )}
@@ -235,12 +237,12 @@ export default function NoticeBoardTab({
 
                     {/* Admin / Manager actions */}
                     {isManagerOrAdmin && (
-                      <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-850 p-1 rounded-lg border border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 p-1 rounded-lg border border-slate-100 dark:border-slate-800">
                         {onTogglePinNotice && (
                           <button
                             onClick={() => onTogglePinNotice(notice.id)}
-                            className={`p-1 rounded hover:bg-slate-250 dark:hover:bg-slate-800 transition ${
-                              notice.isPinned ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-450 hover:text-slate-600'
+                            className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 transition ${
+                              notice.isPinned ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-slate-600'
                             }`}
                             title={notice.isPinned ? (isBangla ? 'পিন সরান' : 'Unpin announcement') : (isBangla ? 'পিন করুন' : 'Pin announcement')}
                           >
@@ -270,12 +272,12 @@ export default function NoticeBoardTab({
                 </div>
 
                 {/* Title */}
-                <h3 className="font-bold text-slate-850 dark:text-white text-base">
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
                   {notice.title}
                 </h3>
 
                 {/* Body Description */}
-                <p className="text-xs text-slate-600 dark:text-slate-350 leading-relaxed whitespace-pre-line">
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
                   {notice.description}
                 </p>
 
@@ -316,7 +318,7 @@ export default function NoticeBoardTab({
                   <a 
                     href="#" 
                     onClick={(e) => { e.preventDefault(); showToast(isBangla ? "ডাউনলোড সফল হয়েছে!" : "Mock download: Attachment downloaded successfully.", "success"); }}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-850 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-[10px] transition border border-slate-100 dark:border-slate-700"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold text-[10px] transition border border-slate-100 dark:border-slate-700"
                   >
                     <Paperclip size={12} /> {notice.attachment}
                   </a>
@@ -330,7 +332,7 @@ export default function NoticeBoardTab({
 
         {sortedNotices.length === 0 && (
           <div className="col-span-full py-16 text-center bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl">
-            <Megaphone className="mx-auto text-slate-350 dark:text-slate-700 mb-3" size={36} />
+            <Megaphone className="mx-auto text-slate-300 dark:text-slate-700 mb-3" size={36} />
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
               {isBangla ? 'কোনো নোটিশ পাওয়া যায়নি' : 'Notice board is clear'}
             </p>
@@ -350,7 +352,7 @@ export default function NoticeBoardTab({
             
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-850 dark:text-white">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                   {isBangla ? 'ঘোষণা প্রকাশ করুন' : 'Publish System Announcement'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">

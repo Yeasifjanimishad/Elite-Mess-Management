@@ -1,48 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  TrendingUp, 
-  TrendingDown,
-  DollarSign, 
-  Users, 
-  Calendar, 
-  ArrowUpRight, 
-  ArrowDownRight,
-  Megaphone, 
-  History, 
-  Sparkles,
+import {
+  TrendingUp,
+  DollarSign,
+  Users,
+  Calendar,
+  Megaphone,
+  History,
   ShoppingBag,
   Coins,
   FileText,
   AlertTriangle,
   CheckCircle,
-  HelpCircle,
   ArrowRight,
   Pin,
+  Lock,
+  Unlock,
+  Plane,
+  Clock,
   Award,
-  Activity,
-  Receipt,
-  Scale
+  BarChart3,
+  PieChart as PieChartIcon
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area, 
-  LineChart, 
-  Line, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  PieChart, 
-  Pie, 
-  Cell 
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import { User, MemberMealSheet, Deposit, BazaarEntry, Expense, Notice, ActivityLog, SystemSettings, VacationPeriod } from '../types';
 import { useFeedback } from './FeedbackContext';
+import {
+  getRealCurrentMonth,
+  getMonthDates,
+  formatMonthLabel,
+  formatShortMonth,
+  formatDateDisplay,
+  formatMonthDayLabel,
+  getEffectiveDatesForMonth
+} from '../utils/dateUtils';
 
 interface DashboardTabProps {
   currentUser: User;
@@ -57,6 +60,7 @@ interface DashboardTabProps {
   settings: SystemSettings;
   onQuickAction: (actionType: 'deposit' | 'bazaar' | 'notice' | 'adjustment' | 'vacation') => void;
   onUpdateMeals: (updatedMeals: MemberMealSheet[]) => void;
+  onNavigateTab?: (tab: string) => void;
   vacationPeriods: VacationPeriod[];
 }
 
@@ -73,76 +77,69 @@ export default function DashboardTab({
   settings,
   onQuickAction,
   onUpdateMeals,
+  onNavigateTab,
   vacationPeriods
 }: DashboardTabProps) {
 
   const { showToast } = useFeedback();
 
-  // Current Date logic
-  const today = '2026-07-18';
-  const tomorrow = '2026-07-19';
+  // Current Active Month & Date logic
+  const activeMonth = settings.activeMonth || getRealCurrentMonth();
+  const { today, tomorrow } = getEffectiveDatesForMonth(activeMonth);
+  const monthDates = getMonthDates(activeMonth);
+  const activeMonthLabel = formatMonthLabel(activeMonth, settings.language);
+  const shortMonthLabel = formatShortMonth(activeMonth);
+
+  const monthBazaarEntries = bazaarEntries.filter(entry => entry.date.startsWith(activeMonth));
+  const monthExpenses = expenses.filter(exp => exp.date.startsWith(activeMonth));
+  const monthDeposits = deposits.filter(d => d.date.startsWith(activeMonth));
 
   const isManagerOrAdmin = role === 'Admin' || role === 'Meal Manager';
   const isBangla = settings.language === 'Bangla';
 
   // Interactive chart state tab
   const [activeChartTab, setActiveChartTab] = useState<'meals' | 'expenses' | 'deposits' | 'comparison'>('meals');
+  // Unified side feed tab to keep 1st look calm and uncluttered
+  const [activeFeedTab, setActiveFeedTab] = useState<'notices' | 'activities' | 'highlights'>('notices');
 
   // Check if a specific user is on vacation for a specific date
   const isVacation = (userId: string, date: string): boolean => {
     return vacationPeriods?.some(vp => vp.userId === userId && date >= vp.startDate && date <= vp.endDate) || false;
   };
 
-  // HELPER CALCULATIONS
-  // Count meals for a given user on a specific date
-  const countMealsForDate = (userMealSheet: MemberMealSheet | undefined, date: string): number => {
-    if (!userMealSheet) return 0;
-    if (isVacation(userMealSheet.userId, date)) return 0; // Automatically OFF during vacation
-    const dayMeal = userMealSheet.meals[date] || {
-      breakfast: true, lunch: true, dinner: true,
-      guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-    };
-    // Breakfast = 0.5, Lunch = 1, Dinner = 1
-    const own = (dayMeal.breakfast ? 0.5 : 0) + (dayMeal.lunch ? 1.0 : 0) + (dayMeal.dinner ? 1.0 : 0);
-    const guest = ((dayMeal.guestBreakfast || 0) * 0.5) + ((dayMeal.guestLunch || 0) * 1.0) + ((dayMeal.guestDinner || 0) * 1.0);
-    return own + guest;
-  };
-
-  // Total Meals of the whole mess across the month
-  const totalMealsInMonth = allUsers.filter(u => u.isActive).reduce((sum, user) => {
+  // Total Meals of the whole mess across the active month
+  const rawTotalMealsInMonth = allUsers.filter(u => u.isActive).reduce((sum, user) => {
     let userSum = 0;
     const userSheet = meals.find(s => s.userId === user.id);
-    for (let day = 1; day <= 31; day++) {
-      const dateStr = `2026-07-${day < 10 ? '0' + day : day}`;
-      if (isVacation(user.id, dateStr)) continue; // skip vacation days
-      const m = userSheet?.meals[dateStr] || {
-        breakfast: true, lunch: true, dinner: true,
-        guestBreakfast: 0, guestLunch: 0, guestDinner: 0
-      };
+    monthDates.forEach(dateStr => {
+      if (isVacation(user.id, dateStr)) return;
+      const m = userSheet?.meals[dateStr];
+      if (!m) return;
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
       const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
       userSum += own + guest;
-    }
+    });
     return sum + userSum;
-  }, 0) || 1; // avoid divide by zero
+  }, 0);
+  const totalMealsInMonth = rawTotalMealsInMonth || 1;
 
-  // Approved Bazaar costs
-  const totalBazaarCost = bazaarEntries
+  // Approved Bazaar costs for active month
+  const totalBazaarCost = monthBazaarEntries
     .filter(entry => entry.status === 'Approved')
     .reduce((sum, entry) => sum + entry.price, 0);
 
-  // Other Expenses (Utility, cleaning etc)
-  const totalOtherExpense = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  // Other Expenses (Utility, cleaning etc) for active month
+  const totalOtherExpense = monthExpenses.reduce((sum, exp) => sum + exp.amount, 0);
 
   const totalExpense = totalBazaarCost + totalOtherExpense;
   const currentMealRate = totalExpense / totalMealsInMonth;
 
-  // Today's total meal counts (individual breakdown)
+  // Today's total meal counts
   const todayBreakdown = allUsers.filter(u => u.isActive).reduce((acc, user) => {
-    if (isVacation(user.id, today)) return acc; // skip vacation days
+    if (isVacation(user.id, today)) return acc;
     const userSheet = meals.find(s => s.userId === user.id);
     const m = userSheet?.meals[today] || {
-      breakfast: true, lunch: true, dinner: true,
+      breakfast: false, lunch: false, dinner: false,
       guestBreakfast: 0, guestLunch: 0, guestDinner: 0
     };
     acc.breakfast += m.breakfast ? 1 : 0;
@@ -159,10 +156,10 @@ export default function DashboardTab({
 
   // Tomorrow's total meal counts
   const tomorrowBreakdown = allUsers.filter(u => u.isActive).reduce((acc, user) => {
-    if (isVacation(user.id, tomorrow)) return acc; // skip vacation days
+    if (isVacation(user.id, tomorrow)) return acc;
     const userSheet = meals.find(s => s.userId === user.id);
     const m = userSheet?.meals[tomorrow] || {
-      breakfast: true, lunch: true, dinner: true,
+      breakfast: false, lunch: false, dinner: false,
       guestBreakfast: 0, guestLunch: 0, guestDinner: 0
     };
     acc.breakfast += m.breakfast ? 1 : 0;
@@ -177,12 +174,7 @@ export default function DashboardTab({
   const tomorrowTotalMealsCount = (tomorrowBreakdown.breakfast * 0.5) + tomorrowBreakdown.lunch + tomorrowBreakdown.dinner +
     (tomorrowBreakdown.guestBreakfast * 0.5) + tomorrowBreakdown.guestLunch + tomorrowBreakdown.guestDinner;
 
-  // Pending deposits count
-  const pendingDepositsSum = deposits.filter(d => !d.transactionId && d.method === 'Cash').reduce((sum, d) => sum + d.amount, 0); // simulated cash deposits without ref
-
-  // Pending Bazaar Entries count
-  const pendingBazaarCount = bazaarEntries.filter(entry => entry.status === 'Pending').length;
-  
+  // Today's Bazaar stats
   const todayBazaarEntries = bazaarEntries.filter(entry => entry.date === today);
   const todayBazaarTotal = todayBazaarEntries
     .filter(entry => entry.status !== 'Rejected')
@@ -193,38 +185,27 @@ export default function DashboardTab({
   const todayBazaarPending = todayBazaarEntries
     .filter(entry => entry.status === 'Pending')
     .reduce((sum, entry) => sum + (entry.total || entry.subtotal || entry.price), 0);
-  
-  const todayBazaarApprovedCost = todayBazaarApproved;
 
-  // -------------------------------------------------------------
-  // ADVANCED ANALYTICS DASHBOARD MATHEMATICS ENGINE
-  // -------------------------------------------------------------
-
-  // 1. Total Monthly Deposit (Approved)
-  const totalMonthlyDeposit = deposits
-    .filter(d => d.status === 'Approved')
-    .reduce((sum, d) => sum + d.amount, 0);
-
-  // 2. Pending Bazaar Entries (Pending status)
-  const pendingBazaarList = bazaarEntries.filter(entry => entry.status === 'Pending');
+  // Pending Bazaar & Deposits
+  const pendingBazaarList = monthBazaarEntries.filter(entry => entry.status === 'Pending');
   const totalPendingBazaarCount = pendingBazaarList.length;
   const totalPendingBazaarAmount = pendingBazaarList.reduce((sum, b) => sum + b.price, 0);
 
-  // 3. Pending Deposits (Pending status)
-  const pendingDepositsList = deposits.filter(d => d.status === 'Pending');
+  const pendingDepositsList = monthDeposits.filter(d => d.status === 'Pending');
   const totalPendingDepositsCount = pendingDepositsList.length;
   const totalPendingDepositsAmount = pendingDepositsList.reduce((sum, d) => sum + d.amount, 0);
 
-  // 4. Most & Least Meals (For Active Members)
+  // Most & Least Meals (Active Members)
   const activeUsers = allUsers.filter(u => u.isActive);
   const memberMealCalculations = activeUsers.map(user => {
     const userSheet = meals.find(sheet => sheet.userId === user.id);
     let ownMealsCount = 0;
     let guestMealsCount = 0;
     if (userSheet) {
-      Object.keys(userSheet.meals).forEach(date => {
+      monthDates.forEach(date => {
         if (isVacation(user.id, date)) return;
         const m = userSheet.meals[date];
+        if (!m) return;
         ownMealsCount += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
         guestMealsCount += (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
       });
@@ -241,8 +222,8 @@ export default function DashboardTab({
   const mostMealsRecord = sortedMembersByMeals.length > 0 ? sortedMembersByMeals[0] : null;
   const leastMealsRecord = sortedMembersByMeals.length > 0 ? sortedMembersByMeals[sortedMembersByMeals.length - 1] : null;
 
-  // 5. Highest Expense (Single approved bazaar entry or standard utility expense)
-  const bazaarExpenses = bazaarEntries
+  // Highest Expense
+  const bazaarExpenses = monthBazaarEntries
     .filter(b => b.status === 'Approved')
     .map(b => ({
       title: b.items,
@@ -250,7 +231,7 @@ export default function DashboardTab({
       date: b.date,
       type: 'Bazaar'
     }));
-  const otherExpenses = expenses.map(e => ({
+  const otherExpenses = monthExpenses.map(e => ({
     title: `${e.category}${e.note ? ` (${e.note})` : ''}`,
     amount: e.amount,
     date: e.date,
@@ -261,8 +242,8 @@ export default function DashboardTab({
     ? [...allExpenseItems].sort((a, b) => b.amount - a.amount)[0]
     : null;
 
-  // 6. Highest Deposit (Single approved deposit)
-  const approvedDepositsList = deposits
+  // Highest Deposit
+  const approvedDepositsList = monthDeposits
     .filter(d => d.status === 'Approved')
     .map(d => {
       const user = allUsers.find(u => u.id === d.userId);
@@ -278,13 +259,10 @@ export default function DashboardTab({
     ? [...approvedDepositsList].sort((a, b) => b.amount - a.amount)[0]
     : null;
 
-  // 7. Interactive Chart Data Processing
-  // Prepare daily values for July 2026 (days 1 to 31)
-  const dailyChartData = Array.from({ length: 31 }, (_, i) => {
+  // Interactive Chart Data Processing
+  const dailyChartData = monthDates.map((dateStr, i) => {
     const dayNum = i + 1;
-    const dateStr = `2026-07-${dayNum < 10 ? '0' + dayNum : dayNum}`;
 
-    // Total meals on this day
     const dayMealsTotal = meals.reduce((sum, sheet) => {
       if (isVacation(sheet.userId, dateStr)) return sum;
       const m = sheet.meals[dateStr];
@@ -294,24 +272,21 @@ export default function DashboardTab({
       return sum + own + guest;
     }, 0);
 
-    // Total approved bazaar expense on this day
-    const dayBazaarTotal = bazaarEntries
+    const dayBazaarTotal = monthBazaarEntries
       .filter(b => b.status === 'Approved' && b.date === dateStr)
       .reduce((sum, b) => sum + b.price, 0);
 
-    // General overhead expense on this day
-    const dayOtherTotal = expenses
+    const dayOtherTotal = monthExpenses
       .filter(e => e.date === dateStr)
       .reduce((sum, e) => sum + e.amount, 0);
 
-    // Total approved deposit on this day
-    const dayDepositTotal = deposits
+    const dayDepositTotal = monthDeposits
       .filter(d => d.status === 'Approved' && d.date === dateStr)
       .reduce((sum, d) => sum + d.amount, 0);
 
     return {
       day: dayNum,
-      shortDate: `Jul ${dayNum}`,
+      shortDate: `${shortMonthLabel} ${dayNum}`,
       meals: parseFloat(dayMealsTotal.toFixed(1)),
       expense: dayBazaarTotal + dayOtherTotal,
       bazaar: dayBazaarTotal,
@@ -320,47 +295,45 @@ export default function DashboardTab({
     };
   });
 
-  // Category distribution for expenses Pie Chart
+  // Category distribution for expenses Pie Chart (Active Month)
   const expenseCategoriesDistribution = [
-    { name: 'Bazaar/Grocery', value: totalBazaarCost, color: '#10b981' }, // emerald
-    { name: 'Gas Utilities', value: expenses.filter(e => e.category === 'Gas').reduce((s, e) => s + e.amount, 0), color: '#f59e0b' }, // amber
-    { name: 'Power/Electricity', value: expenses.filter(e => e.category === 'Electricity').reduce((s, e) => s + e.amount, 0), color: '#3b82f6' }, // blue
-    { name: 'Broadband/Internet', value: expenses.filter(e => e.category === 'Internet').reduce((s, e) => s + e.amount, 0), color: '#8b5cf6' }, // violet
-    { name: 'Water Utilities', value: expenses.filter(e => e.category === 'Water').reduce((s, e) => s + e.amount, 0), color: '#06b6d4' }, // cyan
-    { name: 'Mess Cleaning', value: expenses.filter(e => e.category === 'Cleaning').reduce((s, e) => s + e.amount, 0), color: '#ec4899' }, // pink
-    { name: 'Cook/Maid Salaries', value: expenses.filter(e => e.category === 'Maid').reduce((s, e) => s + e.amount, 0), color: '#14b8a6' }, // teal
-    { name: 'Other Overheads', value: expenses.filter(e => e.category === 'Others').reduce((s, e) => s + e.amount, 0), color: '#64748b' } // slate
+    { name: isBangla ? 'বাজার খরচ' : 'Bazaar / Grocery', value: totalBazaarCost, color: '#10b981' },
+    { name: isBangla ? 'গ্যাস বিল' : 'Gas Utilities', value: monthExpenses.filter(e => e.category === 'Gas').reduce((s, e) => s + e.amount, 0), color: '#f59e0b' },
+    { name: isBangla ? 'বিদ্যুৎ বিল' : 'Electricity', value: monthExpenses.filter(e => e.category === 'Electricity').reduce((s, e) => s + e.amount, 0), color: '#3b82f6' },
+    { name: isBangla ? 'ইন্টারনেট' : 'Internet', value: monthExpenses.filter(e => e.category === 'Internet').reduce((s, e) => s + e.amount, 0), color: '#8b5cf6' },
+    { name: isBangla ? 'পানি বিল' : 'Water', value: monthExpenses.filter(e => e.category === 'Water').reduce((s, e) => s + e.amount, 0), color: '#06b6d4' },
+    { name: isBangla ? 'পরিচ্ছন্নতা' : 'Cleaning', value: monthExpenses.filter(e => e.category === 'Cleaning').reduce((s, e) => s + e.amount, 0), color: '#ec4899' },
+    { name: isBangla ? 'বুয়া / শেফ' : 'Cook / Maid', value: monthExpenses.filter(e => e.category === 'Maid').reduce((s, e) => s + e.amount, 0), color: '#14b8a6' },
+    { name: isBangla ? 'অন্যান্য' : 'Other Overheads', value: monthExpenses.filter(e => e.category === 'Others').reduce((s, e) => s + e.amount, 0), color: '#64748b' }
   ].filter(item => item.value > 0);
 
-  // If empty, add a small mock category to avoid blank pie charts
-  if (expenseCategoriesDistribution.length === 0) {
-    expenseCategoriesDistribution.push({ name: 'General Outflow', value: 100, color: '#10b981' });
-  }
-
-  // USER INDIVIDUAL SUMMARY
+  // USER INDIVIDUAL SUMMARY (Scoped to Active Month)
   const userMealsSheet = meals.find(sheet => sheet.userId === currentUser.id);
-  
-  // Calculate total meals for current user
   let userTotalMeals = 0;
   let userGuestMeals = 0;
   if (userMealsSheet) {
-    Object.keys(userMealsSheet.meals).forEach(date => {
+    monthDates.forEach(date => {
+      if (isVacation(currentUser.id, date)) return;
       const m = userMealsSheet.meals[date];
+      if (!m) return;
       const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-      const guest = (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
+      const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
       userTotalMeals += own;
       userGuestMeals += guest;
     });
   }
 
   const userEstimatedBill = (userTotalMeals + userGuestMeals) * currentMealRate;
-  const userTotalDeposits = deposits
-    .filter(d => d.userId === currentUser.id && d.status !== 'Pending' && d.status !== 'Rejected')
-    .reduce((sum, d) => sum + d.amount, 0);
+  const userApprovedMonthDeposits = monthDeposits
+    .filter(d => d.userId === currentUser.id && d.status !== 'Pending' && d.status !== 'Rejected');
+  const userTotalDeposits = userApprovedMonthDeposits.reduce((sum, d) => sum + d.amount, 0);
+  const lastUserDepositDate = userApprovedMonthDeposits.length > 0
+    ? [...userApprovedMonthDeposits].sort((a, b) => b.date.localeCompare(a.date))[0].date
+    : null;
   const userCarryForward = currentUser.carryForward || 0;
   const userCurrentBalance = userCarryForward + userTotalDeposits - userEstimatedBill;
 
-  // TOMORROW MEAL RESERVATION STATUS (For member interactive edit & Admin/Manager management)
+  // TOMORROW MEAL RESERVATION STATUS
   const [selectedMemberId, setSelectedMemberId] = useState<string>(currentUser.id);
 
   useEffect(() => {
@@ -373,9 +346,9 @@ export default function DashboardTab({
   const targetUser = allUsers.find(u => u.id === targetUserId) || currentUser;
   const targetMealsSheet = meals.find(sheet => sheet.userId === targetUserId);
   const tomorrowMeals = targetMealsSheet?.meals[tomorrow] || {
-    breakfast: true,
-    lunch: true,
-    dinner: true,
+    breakfast: false,
+    lunch: false,
+    dinner: false,
     guestBreakfast: 0,
     guestLunch: 0,
     guestDinner: 0
@@ -384,7 +357,7 @@ export default function DashboardTab({
   const checkIsTomorrowLocked = (): boolean => {
     if (isManagerOrAdmin) return false;
     if (settings.isMonthClosed) return true;
-    if (settings.lockOverride) return false; // Lock overridden by Manager
+    if (settings.lockOverride) return false;
 
     const now = new Date();
     const [lockHour, lockMinute] = settings.mealLockTime.split(':').map(Number);
@@ -413,11 +386,14 @@ export default function DashboardTab({
       return;
     }
 
-    if (!isManagerOrAdmin) {
-      if (checkIsTomorrowLocked()) {
-        showToast(isBangla ? `আগামীকালের মিল লক করা হয়েছে। শেষ সময় ছিল ${settings.mealLockTime}।` : `Meals are locked for tomorrow. The deadline was ${settings.mealLockTime}.`, "warning");
-        return;
-      }
+    if (!isManagerOrAdmin && checkIsTomorrowLocked()) {
+      showToast(
+        isBangla
+          ? `আগামীকালের মিল লক করা হয়েছে। শেষ সময় ছিল ${settings.mealLockTime}।`
+          : `Meals are locked for tomorrow. The deadline was ${settings.mealLockTime}.`,
+        "warning"
+      );
+      return;
     }
 
     let sheetFound = false;
@@ -425,7 +401,7 @@ export default function DashboardTab({
       if (sheet.userId === targetUserId) {
         sheetFound = true;
         const currentDayMeals = sheet.meals[tomorrow] || {
-          breakfast: true, lunch: true, dinner: true,
+          breakfast: false, lunch: false, dinner: false,
           guestBreakfast: 0, guestLunch: 0, guestDinner: 0
         };
         return {
@@ -443,20 +419,19 @@ export default function DashboardTab({
     });
 
     if (!sheetFound) {
-      const newSheet: MemberMealSheet = {
+      updated.push({
         userId: targetUserId,
         meals: {
           [tomorrow]: {
-            breakfast: mealType === 'breakfast' ? false : true,
-            lunch: mealType === 'lunch' ? false : true,
-            dinner: mealType === 'dinner' ? false : true,
+            breakfast: mealType === 'breakfast',
+            lunch: mealType === 'lunch',
+            dinner: mealType === 'dinner',
             guestBreakfast: 0,
             guestLunch: 0,
             guestDinner: 0
           }
         }
-      };
-      updated.push(newSheet);
+      });
     }
 
     onUpdateMeals(updated);
@@ -484,11 +459,14 @@ export default function DashboardTab({
       return;
     }
 
-    if (!isManagerOrAdmin) {
-      if (checkIsTomorrowLocked()) {
-        showToast(isBangla ? `আগামীকালের মিল লক করা হয়েছে। শেষ সময় ছিল ${settings.mealLockTime}।` : `Meals are locked for tomorrow. The deadline was ${settings.mealLockTime}.`, "warning");
-        return;
-      }
+    if (!isManagerOrAdmin && checkIsTomorrowLocked()) {
+      showToast(
+        isBangla
+          ? `আগামীকালের মিল লক করা হয়েছে। শেষ সময় ছিল ${settings.mealLockTime}।`
+          : `Meals are locked for tomorrow. The deadline was ${settings.mealLockTime}.`,
+        "warning"
+      );
+      return;
     }
 
     let sheetFound = false;
@@ -496,7 +474,7 @@ export default function DashboardTab({
       if (sheet.userId === targetUserId) {
         sheetFound = true;
         const currentDayMeals = sheet.meals[tomorrow] || {
-          breakfast: true, lunch: true, dinner: true,
+          breakfast: false, lunch: false, dinner: false,
           guestBreakfast: 0, guestLunch: 0, guestDinner: 0
         };
         const currentCount = currentDayMeals[mealType] || 0;
@@ -516,731 +494,960 @@ export default function DashboardTab({
     });
 
     if (!sheetFound) {
-      const newSheet: MemberMealSheet = {
+      updated.push({
         userId: targetUserId,
         meals: {
           [tomorrow]: {
-            breakfast: true,
-            lunch: true,
-            dinner: true,
+            breakfast: false,
+            lunch: false,
+            dinner: false,
             guestBreakfast: mealType === 'guestBreakfast' ? Math.max(0, delta) : 0,
             guestLunch: mealType === 'guestLunch' ? Math.max(0, delta) : 0,
             guestDinner: mealType === 'guestDinner' ? Math.max(0, delta) : 0
           }
         }
-      };
-      updated.push(newSheet);
+      });
     }
 
     onUpdateMeals(updated);
   };
 
+  const isTargetOnVacation = isVacation(targetUserId, tomorrow);
+  const isTargetLocked = !isManagerOrAdmin && checkIsTomorrowLocked();
+  const mealControlsDisabled = settings.isMonthClosed || isTargetOnVacation || isTargetLocked;
+
+  const mealSlots: Array<{
+    key: 'breakfast' | 'lunch' | 'dinner';
+    guestKey: 'guestBreakfast' | 'guestLunch' | 'guestDinner';
+    label: string;
+    weight: string;
+  }> = [
+    {
+      key: 'breakfast',
+      guestKey: 'guestBreakfast',
+      label: isBangla ? 'সকালের নাস্তা' : 'Breakfast',
+      weight: '0.5'
+    },
+    {
+      key: 'lunch',
+      guestKey: 'guestLunch',
+      label: isBangla ? 'দুপুরের খাবার' : 'Lunch',
+      weight: '1.0'
+    },
+    {
+      key: 'dinner',
+      guestKey: 'guestDinner',
+      label: isBangla ? 'রাতের খাবার' : 'Dinner',
+      weight: '1.0'
+    }
+  ];
+
+  const activeDashboardNotices = notices
+    .filter(n => !n.expiryDate || n.expiryDate >= today)
+    .sort((a, b) => {
+      const pinA = a.isPinned ? 1 : 0;
+      const pinB = b.isPinned ? 1 : 0;
+      if (pinA !== pinB) return pinB - pinA;
+      return b.date.localeCompare(a.date) || b.id.localeCompare(a.id);
+    })
+    .slice(0, 3);
+
   return (
     <div className="space-y-6" id="dashboard-tab">
-      
+
       {/* Month Closed Warning Banner */}
       {settings.isMonthClosed && (
-        <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-800 dark:text-amber-400">
-          <AlertTriangle className="shrink-0" size={20} />
-          <div className="text-sm">
-            <span className="font-semibold">Month is Closed!</span> Currently viewing archive mode. All meal sheets, deposit entries, and bazaar configurations are locked as read-only.
+        <div className="flex items-start sm:items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/25 rounded-2xl text-amber-800 dark:text-amber-300">
+          <AlertTriangle className="shrink-0 mt-0.5 sm:mt-0" size={20} />
+          <div className="text-sm leading-relaxed">
+            <span className="font-bold">
+              {isBangla ? 'মাসটি ক্লোজ করা হয়েছে!' : 'Month is Closed!'}
+            </span>{' '}
+            {isBangla
+              ? 'বর্তমানে আর্কাইভ মোডে আছেন। সব মিল শিট, ডিপোজিট এবং বাজার এন্ট্রি রিড-অনলি হিসেবে লক করা আছে।'
+              : 'Currently viewing archive mode. All meal sheets, deposit entries, and bazaar configurations are locked as read-only.'}
           </div>
         </div>
       )}
 
-      {/* Greetings Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      {/* 1. CLEAN GREETING HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            Welcome back, {currentUser.name}! <Sparkles className="text-amber-500 animate-pulse" size={20} />
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            {isBangla ? `স্বাগতম, ${currentUser.name}` : `Welcome back, ${currentUser.name}`}
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">
-            {isManagerOrAdmin 
-              ? 'Here is an overview of the elite mess operation and expense stats for July 2026.'
-              : 'Keep track of your personal meals, estimated bill, and deposits.'}
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
+            <span>{role}</span>
+            <span aria-hidden="true">·</span>
+            <span>{formatDateDisplay(today, settings.language)}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-          <Calendar size={14} className="text-emerald-600 dark:text-emerald-400" />
-          <span>System Date: July 18, 2026</span>
-        </div>
+
+        {/* Pending Approvals Shortcut Pill for Admin/Manager (only when needed) */}
+        {isManagerOrAdmin && (totalPendingBazaarCount > 0 || totalPendingDepositsCount > 0) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {totalPendingBazaarCount > 0 && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab ? onNavigateTab('Bazaar') : onQuickAction('bazaar')}
+                className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-xs font-bold inline-flex items-center gap-2 transition cursor-pointer whitespace-nowrap"
+              >
+                <Clock size={14} />
+                <span>
+                  {isBangla ? `${totalPendingBazaarCount}টি বাজার পেন্ডিং` : `${totalPendingBazaarCount} Bazaar Pending`}
+                </span>
+                <ArrowRight size={13} />
+              </button>
+            )}
+            {totalPendingDepositsCount > 0 && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab ? onNavigateTab('Deposits') : onQuickAction('deposit')}
+                className="px-3.5 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 text-blue-700 dark:text-blue-300 text-xs font-bold inline-flex items-center gap-2 transition cursor-pointer whitespace-nowrap"
+              >
+                <Coins size={14} />
+                <span>
+                  {isBangla ? `${totalPendingDepositsCount}টি ডিপোজিট পেন্ডিং` : `${totalPendingDepositsCount} Deposits Pending`}
+                </span>
+                <ArrowRight size={13} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* STATS BENTO GRID */}
+      {/* 2. ROOMY 4-CARD SUMMARY (Zero clutter, easy 1st-look scan) */}
       {isManagerOrAdmin ? (
-        /* MANAGER & ADMIN DASHBOARD STATS */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4" id="manager-stats">
-          
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="manager-stats">
+
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start gap-3">
               <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'আজকের মোট মিল' : "Today's Total Meals"}
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {isBangla ? 'আজকের ও আগামীকালের মিল' : "Today & Tomorrow Meals"}
                 </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">{todayTotalMealsCount}</h3>
+                <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1.5 tabular-nums font-mono">
+                  {todayTotalMealsCount}
+                  <span className="text-xs font-semibold text-slate-400 ml-2">
+                    ({isBangla ? 'কাল:' : 'Tom:'} {tomorrowTotalMealsCount})
+                  </span>
+                </h3>
               </div>
-              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl">
+              <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl shrink-0">
                 <Users size={18} />
               </div>
             </div>
-            <div className="mt-3 flex gap-4 text-xs text-slate-500 dark:text-slate-400 font-medium">
-              <span>B: {todayBreakdown.breakfast + todayBreakdown.guestBreakfast}</span>
-              <span>L: {todayBreakdown.lunch + todayBreakdown.guestLunch}</span>
-              <span>D: {todayBreakdown.dinner + todayBreakdown.guestDinner}</span>
-            </div>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-emerald-500/20 group-hover:bg-emerald-500 transition-all"></div>
+            <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium tabular-nums">
+              {isBangla ? 'আজ:' : 'Today:'} B {todayBreakdown.breakfast + todayBreakdown.guestBreakfast} · L {todayBreakdown.lunch + todayBreakdown.guestLunch} · D {todayBreakdown.dinner + todayBreakdown.guestDinner}
+            </p>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start gap-3">
               <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'আগামীকালের মিল' : "Tomorrow's Reserved"}
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {isBangla ? 'বর্তমান মিল রেট' : 'Current Meal Rate'}
                 </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">{tomorrowTotalMealsCount}</h3>
-              </div>
-              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl">
-                <Calendar size={18} />
-              </div>
-            </div>
-            <div className="mt-3 flex gap-4 text-xs text-slate-500 dark:text-slate-400 font-medium">
-              <span>B: {tomorrowBreakdown.breakfast + tomorrowBreakdown.guestBreakfast}</span>
-              <span>L: {tomorrowBreakdown.lunch + tomorrowBreakdown.guestLunch}</span>
-              <span>D: {tomorrowBreakdown.dinner + tomorrowBreakdown.guestDinner}</span>
-            </div>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-amber-500/20 group-hover:bg-amber-500 transition-all"></div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'বর্তমান মিল রেট' : "Current Meal Rate"}
-                </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">
+                <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1.5 tabular-nums font-mono">
                   {settings.currency}{currentMealRate.toFixed(2)}
                 </h3>
               </div>
-              <div className="p-2.5 bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 rounded-xl">
+              <div className="p-2.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-xl shrink-0">
                 <TrendingUp size={18} />
               </div>
             </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 truncate font-medium">
-              {settings.language === 'Bangla' ? 'মোট খরচ' : 'Expenses'}: {settings.currency}{totalExpense} / {totalMealsInMonth} {settings.language === 'Bangla' ? 'মিল' : 'Meals'}
+            <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium tabular-nums truncate">
+              {rawTotalMealsInMonth} {isBangla ? 'মোট মিল এই মাসে' : 'total meals this month'}
             </p>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-violet-500/20 group-hover:bg-violet-500 transition-all"></div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start gap-3">
               <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'চলতি মাসের মোট খরচ' : "Total Monthly Cost"}
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {isBangla ? 'মাসের মোট খরচ' : 'Monthly Total Cost'}
                 </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">
+                <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1.5 tabular-nums font-mono">
                   {settings.currency}{totalExpense.toLocaleString()}
                 </h3>
               </div>
-              <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-xl">
+              <div className="p-2.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
                 <DollarSign size={18} />
               </div>
             </div>
-            <div className="mt-3 flex justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-              <span>Bazaar: {settings.currency}{totalBazaarCost}</span>
-              <span>Utility: {settings.currency}{totalOtherExpense}</span>
-            </div>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500/20 group-hover:bg-blue-500 transition-all"></div>
+            <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium tabular-nums truncate">
+              {isBangla ? 'বাজার:' : 'Bazaar:'} {settings.currency}{totalBazaarCost.toLocaleString()} · {isBangla ? 'অন্যান্য:' : 'Utility:'} {settings.currency}{totalOtherExpense.toLocaleString()}
+            </p>
           </div>
 
-          {/* TODAY'S BAZAAR EXPENSE CARD (NEW) */}
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start gap-3">
               <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'আজকের বাজার খরচ' : "Today's Bazaar Expense"}
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {isBangla ? 'আজকের বাজার খরচ' : "Today's Bazaar"}
                 </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">
+                <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1.5 tabular-nums font-mono">
                   {settings.currency}{todayBazaarTotal.toLocaleString()}
                 </h3>
               </div>
-              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl">
+              <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl shrink-0">
                 <ShoppingBag size={18} />
               </div>
             </div>
-            <div className="mt-3 flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-              <span>{settings.language === 'Bangla' ? 'অনুমোদিত' : 'Approved'}: {settings.currency}{todayBazaarApproved}</span>
-              <span>{settings.language === 'Bangla' ? 'অপেক্ষমাণ' : 'Pending'}: {settings.currency}{todayBazaarPending}</span>
-            </div>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-amber-500/20 group-hover:bg-amber-500 transition-all"></div>
+            <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium tabular-nums truncate">
+              {isBangla ? 'অনুমোদিত:' : 'Approved:'} {settings.currency}{todayBazaarApproved} · {isBangla ? 'পেন্ডিং:' : 'Pending:'} {settings.currency}{todayBazaarPending}
+            </p>
           </div>
 
         </div>
       ) : (
-        /* MEMBER DASHBOARD STATS */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4" id="member-stats">
-          
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'আমার মোট মিল' : "My Total Meals"}
-                </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">
-                  {userTotalMeals + userGuestMeals} <span className="text-sm font-normal text-slate-500 dark:text-slate-400">Meals</span>
-                </h3>
-              </div>
-              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl">
-                <Users size={18} />
-              </div>
-            </div>
-            <div className="mt-3 flex justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-              <span>Own: {userTotalMeals}</span>
-              <span>Guest: {userGuestMeals}</span>
-            </div>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-emerald-500/20 group-hover:bg-emerald-500 transition-all"></div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="member-stats">
 
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start gap-3">
               <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'সম্ভাব্য বিল' : "Estimated Bill"}
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {isBangla ? 'বর্তমান ব্যালেন্স' : 'Current Balance'}
                 </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">
-                  {settings.currency}{userEstimatedBill.toFixed(2)}
-                </h3>
-              </div>
-              <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-xl">
-                <DollarSign size={18} />
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 font-medium">
-              {settings.language === 'Bangla' ? 'মিল রেট অনুযায়ী' : 'Based on live meal rate'}: {settings.currency}{currentMealRate.toFixed(2)}
-            </p>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500/20 group-hover:bg-blue-500 transition-all"></div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'মোট জমা (ডিপোজিট)' : "Total Deposited"}
-                </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">
-                  {settings.currency}{userTotalDeposits.toLocaleString()}
-                </h3>
-              </div>
-              <div className="p-2.5 bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 rounded-xl">
-                <Coins size={18} />
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 font-medium">
-              {settings.language === 'Bangla' ? 'শেষ জমা: ১৫ই জুলাই, ২০২৬' : 'Last Deposit: July 15, 2026'}
-            </p>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-violet-500/20 group-hover:bg-violet-500 transition-all"></div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition flex flex-col justify-between">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'বর্তমান ব্যালেন্স' : "Current Balance"}
-                </p>
-                <h3 className={`text-2xl font-bold mt-1.5 ${userCurrentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                <h3 className={`text-2xl font-extrabold mt-1.5 tabular-nums font-mono ${userCurrentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                   {userCurrentBalance >= 0 ? '+' : '-'}{settings.currency}{Math.abs(userCurrentBalance).toFixed(2)}
                 </h3>
               </div>
-              <div className={`p-2.5 rounded-xl ${userCurrentBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'}`}>
+              <div className={`p-2.5 rounded-xl shrink-0 ${userCurrentBalance >= 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
                 {userCurrentBalance >= 0 ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
               </div>
             </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 truncate font-medium">
-              {userCurrentBalance >= 0 
-                ? (settings.language === 'Bangla' ? 'ধন্যবাদ! আপনার ব্যালেন্স পজিটিভ।' : 'Keep it up! Your balance is positive.')
-                : (settings.language === 'Bangla' ? 'অনুগ্রহ করে দ্রুত ডিপোজিট করুন!' : 'Please pay immediate deposit advance!')}
-              {userCarryForward !== 0 && ` (${settings.language === 'Bangla' ? 'ক্যারী ফরওয়ার্ড' : 'Carry Forward'}: ${userCarryForward >= 0 ? '+' : ''}${settings.currency}${userCarryForward})`}
+            <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium truncate">
+              {userCurrentBalance >= 0
+                ? (isBangla ? 'ব্যালেন্স পজিটিভ আছে' : 'Balance is positive')
+                : (isBangla ? 'বকেয়া আছে — ডিপোজিট করুন' : 'Due balance — please deposit')}
+              {userCarryForward !== 0 && ` · ${isBangla ? 'জের:' : 'Prev:'} ${userCarryForward >= 0 ? '+' : ''}${settings.currency}${userCarryForward}`}
             </p>
-            <div className={`absolute bottom-0 left-0 w-full h-1 ${userCurrentBalance >= 0 ? 'bg-emerald-500/20 group-hover:bg-emerald-500' : 'bg-rose-500/20 group-hover:bg-rose-500'} transition-all`}></div>
           </div>
 
-          {/* TODAY'S BAZAAR EXPENSE CARD FOR MEMBER TOO */}
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition">
-            <div className="flex justify-between items-start">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start gap-3">
               <div>
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {settings.language === 'Bangla' ? 'আজকের মেস বাজার' : "Today's Mess Bazaar"}
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {isBangla ? 'আমার মোট মিল' : 'My Total Meals'}
                 </p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1.5">
-                  {settings.currency}{todayBazaarTotal.toLocaleString()}
+                <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1.5 tabular-nums font-mono">
+                  {userTotalMeals + userGuestMeals}
+                  <span className="text-xs font-semibold text-slate-400 ml-2">
+                    ({isBangla ? `নিজ ${userTotalMeals}` : `Own ${userTotalMeals}`})
+                  </span>
                 </h3>
               </div>
-              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl">
-                <ShoppingBag size={18} />
+              <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl shrink-0">
+                <Users size={18} />
               </div>
             </div>
-            <div className="mt-3 flex justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-              <span>{settings.language === 'Bangla' ? 'অনুমোদিত' : 'Approved'}: {settings.currency}{todayBazaarApproved}</span>
-              <span>{settings.language === 'Bangla' ? 'অপেক্ষমাণ' : 'Pending'}: {settings.currency}{todayBazaarPending}</span>
+            <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium tabular-nums truncate">
+              {isBangla ? `মেস আজ: ${todayTotalMealsCount} · কাল: ${tomorrowTotalMealsCount}` : `Mess today: ${todayTotalMealsCount} · Tom: ${tomorrowTotalMealsCount}`}
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start gap-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {isBangla ? 'সম্ভাব্য বিল' : 'Estimated Bill'}
+                </p>
+                <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1.5 tabular-nums font-mono">
+                  {settings.currency}{userEstimatedBill.toFixed(2)}
+                </h3>
+              </div>
+              <div className="p-2.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
+                <DollarSign size={18} />
+              </div>
             </div>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-amber-500/20 group-hover:bg-amber-500 transition-all"></div>
+            <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium tabular-nums truncate">
+              {isBangla ? 'বর্তমান মিল রেট:' : 'Live meal rate:'} {settings.currency}{currentMealRate.toFixed(2)}
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-start gap-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {isBangla ? 'মোট জমা (ডিপোজিট)' : 'Total Deposited'}
+                </p>
+                <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1.5 tabular-nums font-mono">
+                  {settings.currency}{userTotalDeposits.toLocaleString()}
+                </h3>
+              </div>
+              <div className="p-2.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-xl shrink-0">
+                <Coins size={18} />
+              </div>
+            </div>
+            <p className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium truncate tabular-nums">
+              {lastUserDepositDate
+                ? `${isBangla ? 'শেষ জমা:' : 'Last:'} ${formatDateDisplay(lastUserDepositDate, settings.language)}`
+                : `${isBangla ? 'আজকের বাজার:' : "Today's Bazaar:"} ${settings.currency}${todayBazaarTotal.toLocaleString()}`}
+            </p>
           </div>
 
         </div>
       )}
 
-      {/* RECENT NOTIFICATIONS & QUICK ACTIONS GRID */}
+      {/* 3. PRIMARY WORKSPACE: MEAL TOGGLE + ANALYTICS ON LEFT, QUICK ACTIONS + TABBED UPDATES ON RIGHT */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* LEFT/MID MAIN FEED: TOMORROW'S MEALS RESERVATION (IF MEMBER) OR QUICK ACTIONS (IF MANAGER) & METRICS */}
+
+        {/* LEFT 2 COLUMNS */}
         <div className="lg:col-span-2 space-y-6">
 
-          {/* TODAY & TOMORROW MESS SUMMARY BAR FOR MEMBERS */}
-          {!isManagerOrAdmin && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-emerald-500/5 dark:bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl mb-6">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-650 dark:text-slate-350 uppercase tracking-wide flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Today's Mess Meals (July 18):
-                </span>
-                <span className="text-xs font-black text-slate-800 dark:text-white bg-white dark:bg-slate-900 px-3 py-1 rounded-xl shadow-xs border border-slate-100 dark:border-slate-800">
-                  {todayTotalMealsCount} Meals
-                </span>
-              </div>
-              <div className="flex items-center justify-between sm:border-l sm:border-slate-150 dark:sm:border-slate-800 sm:pl-4">
-                <span className="text-xs font-bold text-slate-650 dark:text-slate-350 uppercase tracking-wide flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                  Tomorrow's Mess Meals (July 19):
-                </span>
-                <span className="text-xs font-black text-slate-800 dark:text-white bg-white dark:bg-slate-900 px-3 py-1 rounded-xl shadow-xs border border-slate-100 dark:border-slate-800">
-                  {tomorrowTotalMealsCount} Meals
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* INTERACTIVE TOMORROW'S MEAL CONFIG (Visible to all, but especially empowering for Members) */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5 border-b border-slate-100 dark:border-slate-800 pb-4">
+          {/* TOMORROW'S MEAL RESERVATION */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                  Tomorrow's Meal Reservation <span className="text-[11px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded uppercase tracking-wider">Tomorrow: July 19</span>
-                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                    {isBangla ? 'আগামীকালের মিল নির্ধারণ' : "Tomorrow's Meal Reservation"}
+                  </h2>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    · {formatMonthDayLabel(tomorrow)}
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Update active meals and expected guest meals before the deadline at <span className="font-semibold text-emerald-600 dark:text-emerald-400">{settings.mealLockTime} today</span>.
+                  {isBangla
+                    ? `শেষ সময়: আজ ${settings.mealLockTime}`
+                    : `Daily cutoff at ${settings.mealLockTime}`}
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 {isManagerOrAdmin && (
-                  <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 pl-1">
-                      {isBangla ? 'মেম্বার:' : 'Member:'}
-                    </span>
-                    <select
-                      value={targetUserId}
-                      onChange={(e) => setSelectedMemberId(e.target.value)}
-                      className="text-xs font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-white px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs"
-                    >
-                      {allUsers.filter(u => u.isActive).map(u => (
-                        <option key={u.id} value={u.id}>
-                          {u.name} ({u.role}){u.id === currentUser.id ? (isBangla ? ' (আপনি)' : ' (You)') : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <select
+                    aria-label="Select member for tomorrow meals"
+                    value={targetUserId}
+                    onChange={(e) => setSelectedMemberId(e.target.value)}
+                    className="text-xs font-bold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    {allUsers.filter(u => u.isActive).map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role}){u.id === currentUser.id ? (isBangla ? ' (আপনি)' : ' (You)') : ''}
+                      </option>
+                    ))}
+                  </select>
                 )}
 
-                {isVacation(targetUserId, tomorrow) ? (
-                  <span className="text-xs bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold px-2.5 py-1 rounded-full border border-sky-500/15">
-                    ✈ Vacation Active
-                  </span>
-                ) : checkIsTomorrowLocked() ? (
-                  <span className="text-xs bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold px-2.5 py-1 rounded-full border border-rose-500/15">
-                    🔒 Locked
-                  </span>
-                ) : settings.lockOverride ? (
-                  <span className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2.5 py-1 rounded-full border border-emerald-500/15">
-                    🔓 Override Active
-                  </span>
-                ) : (
-                  <span className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-2.5 py-1 rounded-full border border-emerald-500/15">
-                    🔓 Open
-                  </span>
+                <span className={`inline-flex items-center gap-1 text-xs font-bold whitespace-nowrap ${
+                  isTargetOnVacation
+                    ? 'text-sky-600 dark:text-sky-400'
+                    : isTargetLocked
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  {isTargetOnVacation ? <Plane size={14} /> : isTargetLocked ? <Lock size={14} /> : <Unlock size={14} />}
+                  {isTargetOnVacation
+                    ? (isBangla ? 'ছুটি' : 'Vacation')
+                    : isTargetLocked
+                    ? (isBangla ? 'লক' : 'Locked')
+                    : settings.lockOverride
+                    ? (isBangla ? 'ওভাররাইড' : 'Override')
+                    : (isBangla ? 'খোলা' : 'Open')}
+                </span>
+
+                {onNavigateTab && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab('MealSheet')}
+                    className="px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <span>{isBangla ? 'পূর্ণ শিট' : 'Full Sheet'}</span>
+                    <ArrowRight size={13} />
+                  </button>
                 )}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              
-              {/* BREAKFAST CARD */}
-              <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col justify-between gap-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Breakfast</span>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTomorrowOwn('breakfast')}
-                    disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked()))}
-                    className={`text-xs font-semibold px-3 py-1 rounded-full border transition-all cursor-pointer ${
-                      tomorrowMeals.breakfast 
-                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50'
-                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50'
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              {mealSlots.map((slot) => {
+                const isMealOn = tomorrowMeals[slot.key];
+                const guestCount = tomorrowMeals[slot.guestKey] || 0;
+
+                return (
+                  <div
+                    key={slot.key}
+                    className={`rounded-xl p-4 border transition-colors flex flex-col justify-between gap-3.5 ${
+                      isMealOn
+                        ? 'border-emerald-500/35 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.08]'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40'
                     }`}
                   >
-                    {tomorrowMeals.breakfast ? 'Meal ON' : 'Meal OFF'}
-                  </button>
-                </div>
-                
-                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Guests:</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateGuestTomorrow('guestBreakfast', -1)}
-                      disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked())) || tomorrowMeals.guestBreakfast <= 0}
-                      className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-white w-4 text-center">
-                      {tomorrowMeals.guestBreakfast}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateGuestTomorrow('guestBreakfast', 1)}
-                      disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked())) || tomorrowMeals.guestBreakfast >= settings.guestMealLimit}
-                      className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-sm font-bold text-slate-900 dark:text-white block">
+                          {slot.label}
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                          {slot.weight} {isBangla ? 'মিল' : 'meal'}
+                        </span>
+                      </div>
 
-              {/* LUNCH CARD */}
-              <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col justify-between gap-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Lunch</span>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTomorrowOwn('lunch')}
-                    disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked()))}
-                    className={`text-xs font-semibold px-3 py-1 rounded-full border transition-all cursor-pointer ${
-                      tomorrowMeals.lunch 
-                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50'
-                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50'
-                    }`}
-                  >
-                    {tomorrowMeals.lunch ? 'Meal ON' : 'Meal OFF'}
-                  </button>
-                </div>
-                
-                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Guests:</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateGuestTomorrow('guestLunch', -1)}
-                      disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked())) || tomorrowMeals.guestLunch <= 0}
-                      className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-white w-4 text-center">
-                      {tomorrowMeals.guestLunch}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateGuestTomorrow('guestLunch', 1)}
-                      disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked())) || tomorrowMeals.guestLunch >= settings.guestMealLimit}
-                      className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTomorrowOwn(slot.key)}
+                        disabled={mealControlsDisabled}
+                        className={`min-h-[40px] px-4 py-2 rounded-xl text-xs font-bold border transition cursor-pointer whitespace-nowrap shrink-0 ${
+                          isMealOn
+                            ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50'
+                            : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50'
+                        }`}
+                      >
+                        {isMealOn ? (isBangla ? 'চালু (ON)' : 'Meal ON') : (isBangla ? 'বন্ধ (OFF)' : 'Meal OFF')}
+                      </button>
+                    </div>
 
-              {/* DINNER CARD */}
-              <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col justify-between gap-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Dinner</span>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleTomorrowOwn('dinner')}
-                    disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked()))}
-                    className={`text-xs font-semibold px-3 py-1 rounded-full border transition-all cursor-pointer ${
-                      tomorrowMeals.dinner 
-                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50'
-                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50'
-                    }`}
-                  >
-                    {tomorrowMeals.dinner ? 'Meal ON' : 'Meal OFF'}
-                  </button>
-                </div>
-                
-                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-3">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Guests:</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateGuestTomorrow('guestDinner', -1)}
-                      disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked())) || tomorrowMeals.guestDinner <= 0}
-                      className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-white w-4 text-center">
-                      {tomorrowMeals.guestDinner}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateGuestTomorrow('guestDinner', 1)}
-                      disabled={settings.isMonthClosed || (!isManagerOrAdmin && (isVacation(targetUserId, tomorrow) || checkIsTomorrowLocked())) || tomorrowMeals.guestDinner >= settings.guestMealLimit}
-                      className="w-6 h-6 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 disabled:opacity-50 cursor-pointer"
-                    >
-                      +
-                    </button>
+                    <div className="flex items-center justify-between border-t border-slate-200/70 dark:border-slate-800 pt-2.5">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                        {isBangla ? 'অতিথি' : 'Guests'}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateGuestTomorrow(slot.guestKey, -1)}
+                          disabled={mealControlsDisabled || guestCount <= 0}
+                          aria-label={`Decrease ${slot.label} guests`}
+                          className="w-9 h-9 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer transition"
+                        >
+                          -
+                        </button>
+                        <span className="text-sm font-extrabold text-slate-900 dark:text-white w-6 text-center tabular-nums font-mono">
+                          {guestCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateGuestTomorrow(slot.guestKey, 1)}
+                          disabled={mealControlsDisabled || guestCount >= settings.guestMealLimit}
+                          aria-label={`Increase ${slot.label} guests`}
+                          className="w-9 h-9 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-sm font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer transition"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-
+                );
+              })}
             </div>
           </div>
 
-          {/* VISUAL CHARTS MODULE (ELEGANT MOCKUP OF MEAL RATE & COST BREAKDOWNS) */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-6">
+          {/* INTERACTIVE MONTHLY ANALYTICS CHART */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
               <div>
-                <h3 className="font-semibold text-slate-800 dark:text-white">Monthly Expense & Meal Trends</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Live system visual analytics of expenses vs meal counts.</p>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  {activeChartTab === 'comparison' ? <PieChartIcon size={18} className="text-emerald-600 dark:text-emerald-400" /> : <BarChart3 size={18} className="text-emerald-600 dark:text-emerald-400" />}
+                  {isBangla ? `${activeMonthLabel}-এর খরচ ও মিল বিশ্লেষণ` : `Monthly Analytics · ${activeMonthLabel}`}
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {isBangla
+                    ? 'প্রতিদিনের মিল, খরচ এবং জমার লাইভ পরিসংখ্যান।'
+                    : 'Daily overview of meals, expenses, and deposits.'}
+                </p>
               </div>
-              <div className="flex items-center gap-2 text-xs bg-slate-50 dark:bg-slate-800 p-1 rounded-lg border border-slate-100 dark:border-slate-700">
-                <span className="px-2 py-1 bg-white dark:bg-slate-700 font-medium shadow-sm rounded text-slate-700 dark:text-white">Expenses</span>
-                <span className="px-2 py-1 text-slate-400">Meals</span>
+
+              <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto overflow-x-auto max-w-full">
+                {([
+                  { id: 'meals', label: isBangla ? 'মিল' : 'Meals' },
+                  { id: 'expenses', label: isBangla ? 'খরচ' : 'Expenses' },
+                  { id: 'deposits', label: isBangla ? 'জমা' : 'Deposits' },
+                  { id: 'comparison', label: isBangla ? 'ক্যাটাগরি' : 'Breakdown' }
+                ] as const).map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveChartTab(tab.id)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer whitespace-nowrap shrink-0 ${
+                      activeChartTab === tab.id
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* HIGH FIDELITY SVG CHART REPRESENTING EXPENSE HISTORY WITH TOOLTIPS */}
-            <div className="relative h-60 w-full bg-slate-50/50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-              
-              <div className="absolute top-4 left-4 text-xs font-semibold text-slate-400 dark:text-slate-500">৳8,000</div>
-              <div className="absolute top-1/2 left-4 text-xs font-semibold text-slate-400 dark:text-slate-500">৳4,000</div>
-              <div className="absolute bottom-10 left-4 text-xs font-semibold text-slate-400 dark:text-slate-500">৳0</div>
+            <div className="h-64 w-full min-w-0">
+              {activeChartTab === 'meals' && (
+                <ResponsiveContainer width="100%" height={256} minWidth={0}>
+                  <AreaChart data={dailyChartData} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="mealsAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.28} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" vertical={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: '#334155',
+                        borderRadius: '12px',
+                        color: '#f8fafc',
+                        fontSize: '12px'
+                      }}
+                      labelFormatter={(label) => `${shortMonthLabel} ${label}`}
+                      formatter={(value: any) => [`${value} ${isBangla ? 'মিল' : 'Meals'}`, isBangla ? 'মোট মিল' : 'Total Meals']}
+                    />
+                    <Area type="monotone" dataKey="meals" stroke="#10b981" strokeWidth={2.5} fill="url(#mealsAreaGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
 
-              {/* The lines */}
-              <div className="flex-1 w-full relative">
-                <svg className="w-full h-full" viewBox="0 0 500 150" preserveAspectRatio="none">
-                  {/* Grid Lines */}
-                  <line x1="0" y1="20" x2="500" y2="20" stroke="currentColor" className="text-slate-200 dark:text-slate-800/60" strokeDasharray="3,3" />
-                  <line x1="0" y1="75" x2="500" y2="75" stroke="currentColor" className="text-slate-200 dark:text-slate-800/60" strokeDasharray="3,3" />
-                  <line x1="0" y1="130" x2="500" y2="130" stroke="currentColor" className="text-slate-200 dark:text-slate-800/60" strokeDasharray="3,3" />
+              {activeChartTab === 'expenses' && (
+                <ResponsiveContainer width="100%" height={256} minWidth={0}>
+                  <BarChart data={dailyChartData} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" vertical={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: '#334155',
+                        borderRadius: '12px',
+                        color: '#f8fafc',
+                        fontSize: '12px'
+                      }}
+                      labelFormatter={(label) => `${shortMonthLabel} ${label}`}
+                      formatter={(value: any, name: any) => [`${settings.currency}${Number(value).toLocaleString()}`, name === 'bazaar' ? (isBangla ? 'বাজার' : 'Bazaar') : (isBangla ? 'অন্যান্য' : 'Utility')]}
+                    />
+                    <Bar dataKey="bazaar" stackId="exp" fill="#10b981" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="overhead" stackId="exp" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
 
-                  {/* Gradient Area under curve */}
-                  <defs>
-                    <linearGradient id="gradient-chart" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  
-                  {/* Fill area */}
-                  <path
-                    d="M 10 130 Q 80 50 150 90 T 300 30 T 450 60 Q 480 60 490 130 Z"
-                    fill="url(#gradient-chart)"
-                  />
-                  
-                  {/* Curve Path */}
-                  <path
-                    d="M 10 130 Q 80 50 150 90 T 300 30 T 450 60 Q 480 60 490 70"
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                  />
+              {activeChartTab === 'deposits' && (
+                <ResponsiveContainer width="100%" height={256} minWidth={0}>
+                  <AreaChart data={dailyChartData} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="depositAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.28} />
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" vertical={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: '#334155',
+                        borderRadius: '12px',
+                        color: '#f8fafc',
+                        fontSize: '12px'
+                      }}
+                      labelFormatter={(label) => `${shortMonthLabel} ${label}`}
+                      formatter={(value: any) => [`${settings.currency}${Number(value).toLocaleString()}`, isBangla ? 'জমা' : 'Deposited']}
+                    />
+                    <Area type="monotone" dataKey="deposit" stroke="#6366f1" strokeWidth={2.5} fill="url(#depositAreaGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
 
-                  {/* Nodes */}
-                  <circle cx="10" cy="130" r="4.5" className="fill-emerald-600 stroke-white" strokeWidth="2" />
-                  <circle cx="110" cy="70" r="4.5" className="fill-emerald-600 stroke-white" strokeWidth="2" />
-                  <circle cx="220" cy="50" r="4.5" className="fill-emerald-600 stroke-white" strokeWidth="2" />
-                  <circle cx="330" cy="35" r="4.5" className="fill-emerald-600 stroke-white" strokeWidth="2" />
-                  <circle cx="440" cy="58" r="4.5" className="fill-emerald-600 stroke-white" strokeWidth="2" />
-                </svg>
-              </div>
-
-              {/* X Axis Labels */}
-              <div className="flex justify-between items-center text-[10px] font-semibold text-slate-400 dark:text-slate-500 px-6 border-t border-slate-100 dark:border-slate-800 pt-2">
-                <span>July 01</span>
-                <span>July 05</span>
-                <span>July 10</span>
-                <span>July 15</span>
-                <span>July 18 (Today)</span>
-              </div>
+              {activeChartTab === 'comparison' && (
+                expenseCategoriesDistribution.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      {isBangla ? `${activeMonthLabel}-এ এখনো কোনো খরচ অনুমোদিত হয়নি।` : `No approved expenses recorded in ${activeMonthLabel} yet.`}
+                    </p>
+                    {isManagerOrAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => onQuickAction('bazaar')}
+                        className="mt-3 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer"
+                      >
+                        {isBangla ? 'প্রথম বাজার যোগ করুন' : 'Log First Bazaar Entry'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center h-full">
+                    <div className="h-56 w-full min-w-0">
+                      <ResponsiveContainer width="100%" height={224} minWidth={0}>
+                        <PieChart>
+                          <Pie
+                            data={expenseCategoriesDistribution}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={48}
+                            outerRadius={80}
+                            paddingAngle={3}
+                          >
+                            {expenseCategoriesDistribution.map((entry, idx) => (
+                              <Cell key={idx} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: '#0f172a',
+                              borderColor: '#334155',
+                              borderRadius: '12px',
+                              color: '#f8fafc',
+                              fontSize: '12px'
+                            }}
+                            formatter={(value: any) => `${settings.currency}${Number(value).toLocaleString()}`}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {expenseCategoriesDistribution.map((cat) => (
+                        <div key={cat.name} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                          <span className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200 truncate">
+                            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: cat.color }} />
+                            <span className="truncate">{cat.name}</span>
+                          </span>
+                          <span className="font-bold text-slate-900 dark:text-white tabular-nums font-mono shrink-0">
+                            {settings.currency}{cat.value.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              )}
             </div>
           </div>
 
         </div>
 
-        {/* RIGHT SIDEBAR: QUICK ACTIONS & NOTICES */}
+        {/* RIGHT COLUMN: QUICK ACTIONS + CLEAN TABBED UPDATES (NOTICES / ACTIVITY / HIGHLIGHTS) */}
         <div className="space-y-6">
-          
-          {/* QUICK ACTIONS CARD (Adaptive depending on lock/open month) */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
-            <h3 className="font-semibold text-slate-800 dark:text-white mb-4">Quick Actions</h3>
-            
-            <div className="grid grid-cols-2 gap-2">
+
+          {/* QUICK ACTIONS CARD */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+              {isBangla ? 'দ্রুত অ্যাকশন' : 'Quick Actions'}
+            </h2>
+
+            <div className="grid grid-cols-2 gap-2.5">
               {isManagerOrAdmin ? (
                 <>
                   <button
+                    type="button"
                     onClick={() => onQuickAction('deposit')}
                     disabled={settings.isMonthClosed}
-                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:border-emerald-200 dark:hover:border-emerald-800 transition text-slate-700 dark:text-slate-300 group disabled:opacity-50 disabled:pointer-events-none"
+                    className="flex flex-col items-center justify-center min-h-[76px] p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition text-slate-700 dark:text-slate-200 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                   >
-                    <Coins className="text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition duration-300 mb-1.5" size={20} />
-                    <span className="text-xs font-semibold text-center">Add Deposit</span>
+                    <Coins className="text-emerald-600 dark:text-emerald-400 mb-1.5" size={20} />
+                    <span className="text-xs font-bold text-center whitespace-nowrap">
+                      {isBangla ? 'ডিপোজিট যোগ' : 'Add Deposit'}
+                    </span>
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => onQuickAction('bazaar')}
                     disabled={settings.isMonthClosed}
-                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:border-emerald-200 dark:hover:border-emerald-800 transition text-slate-700 dark:text-slate-300 group disabled:opacity-50 disabled:pointer-events-none"
+                    className="flex flex-col items-center justify-center min-h-[76px] p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-amber-500/10 hover:border-amber-500/30 transition text-slate-700 dark:text-slate-200 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                   >
-                    <ShoppingBag className="text-amber-600 dark:text-amber-400 group-hover:scale-110 transition duration-300 mb-1.5" size={20} />
-                    <span className="text-xs font-semibold text-center">Add Bazaar</span>
+                    <ShoppingBag className="text-amber-600 dark:text-amber-400 mb-1.5" size={20} />
+                    <span className="text-xs font-bold text-center whitespace-nowrap">
+                      {isBangla ? 'বাজার যোগ' : 'Add Bazaar'}
+                    </span>
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => onQuickAction('notice')}
-                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:border-emerald-200 dark:hover:border-emerald-800 transition text-slate-700 dark:text-slate-300 group"
+                    className="flex flex-col items-center justify-center min-h-[76px] p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-sky-500/10 hover:border-sky-500/30 transition text-slate-700 dark:text-slate-200 cursor-pointer"
                   >
-                    <Megaphone className="text-sky-600 dark:text-sky-400 group-hover:scale-110 transition duration-300 mb-1.5" size={20} />
-                    <span className="text-xs font-semibold text-center">Post Notice</span>
+                    <Megaphone className="text-sky-600 dark:text-sky-400 mb-1.5" size={20} />
+                    <span className="text-xs font-bold text-center whitespace-nowrap">
+                      {isBangla ? 'নোটিশ পোস্ট' : 'Post Notice'}
+                    </span>
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => onQuickAction('adjustment')}
                     disabled={settings.isMonthClosed}
-                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:border-emerald-200 dark:hover:border-emerald-800 transition text-slate-700 dark:text-slate-300 group disabled:opacity-50 disabled:pointer-events-none"
+                    className="flex flex-col items-center justify-center min-h-[76px] p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-violet-500/10 hover:border-violet-500/30 transition text-slate-700 dark:text-slate-200 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                   >
-                    <FileText className="text-violet-600 dark:text-violet-400 group-hover:scale-110 transition duration-300 mb-1.5" size={20} />
-                    <span className="text-xs font-semibold text-center">Meal Adjust</span>
+                    <FileText className="text-violet-600 dark:text-violet-400 mb-1.5" size={20} />
+                    <span className="text-xs font-bold text-center whitespace-nowrap">
+                      {isBangla ? 'মিল অ্যাডজাস্ট' : 'Meal Adjust'}
+                    </span>
                   </button>
                 </>
               ) : (
                 <>
                   <button
+                    type="button"
                     onClick={() => onQuickAction('vacation')}
                     disabled={settings.isMonthClosed}
-                    className="flex flex-col items-center justify-center p-4 col-span-2 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:border-emerald-200 dark:hover:border-emerald-800 transition text-slate-700 dark:text-slate-300 group disabled:opacity-50"
+                    className="flex flex-col items-center justify-center p-4 col-span-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition text-slate-700 dark:text-slate-200 disabled:opacity-50 cursor-pointer"
                   >
-                    <Calendar className="text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition duration-300 mb-2" size={22} />
-                    <span className="text-sm font-semibold">Request Vacation Mode</span>
-                    <span className="text-[10px] text-slate-400 mt-1">Automatically marks off future meal dates</span>
+                    <Calendar className="text-emerald-600 dark:text-emerald-400 mb-1.5" size={20} />
+                    <span className="text-sm font-bold">
+                      {isBangla ? 'ছুটি (Vacation) আবেদন' : 'Request Vacation Mode'}
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {isBangla ? 'ছুটির দিনে মিল স্বয়ংক্রিয়ভাবে বন্ধ থাকবে' : 'Automatically marks off meal dates'}
+                    </span>
                   </button>
+
+                  {onNavigateTab && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onNavigateTab('Deposits')}
+                        className="flex flex-col items-center justify-center min-h-[68px] p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition text-slate-700 dark:text-slate-200 cursor-pointer"
+                      >
+                        <Coins className="text-emerald-600 dark:text-emerald-400 mb-1" size={18} />
+                        <span className="text-xs font-bold whitespace-nowrap">
+                          {isBangla ? 'আমার ডিপোজিট' : 'My Deposits'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => onNavigateTab('Reports')}
+                        className="flex flex-col items-center justify-center min-h-[68px] p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-blue-500/10 hover:border-blue-500/30 transition text-slate-700 dark:text-slate-200 cursor-pointer"
+                      >
+                        <BarChart3 className="text-blue-600 dark:text-blue-400 mb-1" size={18} />
+                        <span className="text-xs font-bold whitespace-nowrap">
+                          {isBangla ? 'মাসিক রিপোর্ট' : 'Monthly Report'}
+                        </span>
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>
           </div>
 
-          {/* RECENT NOTICES PREVIEW */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                <Megaphone size={18} className="text-emerald-600 dark:text-emerald-400" /> 
-                {isBangla ? 'আজকের নোটিশসমূহ' : "Today's Notices"}
-              </h3>
+          {/* UNIFIED TABBED UPDATES & INSIGHTS PANEL */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
+            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 mb-4">
+              <button
+                type="button"
+                onClick={() => setActiveFeedTab('notices')}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                  activeFeedTab === 'notices'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Megaphone size={13} />
+                <span>{isBangla ? 'নোটিশ' : 'Notices'}</span>
+                {activeDashboardNotices.length > 0 && (
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    ({activeDashboardNotices.length})
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveFeedTab('activities')}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                  activeFeedTab === 'activities'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <History size={13} />
+                <span>{isBangla ? 'কার্যক্রম' : 'Activity'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveFeedTab('highlights')}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                  activeFeedTab === 'highlights'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Award size={13} />
+                <span>{isBangla ? 'হাইলাইটস' : 'Highlights'}</span>
+              </button>
             </div>
-            
-            <div className="space-y-3">
-              {(() => {
-                const activeDashboardNotices = notices
-                  .filter(n => !n.expiryDate || n.expiryDate >= today)
-                  .sort((a, b) => {
-                    const pinA = a.isPinned ? 1 : 0;
-                    const pinB = b.isPinned ? 1 : 0;
-                    if (pinA !== pinB) return pinB - pinA;
-                    return b.date.localeCompare(a.date) || b.id.localeCompare(a.id);
-                  })
-                  .slice(0, 3);
 
-                if (activeDashboardNotices.length === 0) {
-                  return (
-                    <div className="py-8 text-center text-xs text-slate-450 dark:text-slate-500 font-medium">
-                      {isBangla ? 'কোনো নোটিশ বা ঘোষণা নেই' : 'No recent notices available'}
-                    </div>
-                  );
-                }
-
-                return activeDashboardNotices.map((notice) => (
-                  <div 
-                    key={notice.id} 
-                    className={`p-3.5 rounded-xl border text-sm relative overflow-hidden ${
-                      notice.isPinned
-                        ? 'border-indigo-200 dark:border-indigo-950/60 bg-indigo-500/5 text-indigo-900 dark:text-indigo-300 ring-1 ring-indigo-500/10'
-                        : notice.priority === 'High' 
-                        ? 'bg-rose-500/5 border-rose-500/10 text-rose-900 dark:text-rose-300' 
-                        : notice.priority === 'Medium'
-                        ? 'bg-amber-500/5 border-amber-500/10 text-amber-900 dark:text-amber-300'
-                        : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    {notice.isPinned && (
-                      <div className="absolute top-0 left-0 w-full h-0.5 bg-indigo-500"></div>
-                    )}
-                    <div className="flex justify-between items-start gap-2">
-                      <span className="font-semibold line-clamp-1 flex items-center gap-1.5 text-slate-800 dark:text-slate-200">
-                        {notice.isPinned && <Pin size={11} className="text-indigo-500 fill-indigo-500 shrink-0 rotate-45" />}
-                        {notice.title}
-                      </span>
-                      <span className={`text-[8px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded shrink-0 ${
-                        notice.isPinned
-                          ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25'
-                          : notice.priority === 'High' 
-                          ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' 
-                          : 'bg-slate-200/50 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                      }`}>
-                        {notice.isPinned 
-                          ? (isBangla ? 'পিন্ড' : 'Pinned') 
-                          : (isBangla 
-                              ? (notice.priority === 'High' ? 'উচ্চ' : notice.priority === 'Medium' ? 'মাঝারি' : 'নিম্ন')
-                              : notice.priority)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 line-clamp-2 leading-relaxed">
-                      {notice.description}
-                    </p>
-                    <div className="flex justify-between items-center mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-850 text-[10px] text-slate-400">
-                      <span>{isBangla ? 'প্রকাশক:' : 'By:'} {notice.authorName}</span>
-                      <span>{notice.date}</span>
-                    </div>
+            {/* TAB 1: NOTICES */}
+            {activeFeedTab === 'notices' && (
+              <div className="space-y-3">
+                {activeDashboardNotices.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 font-medium border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                    {isBangla ? 'কোনো নোটিশ বা ঘোষণা নেই' : 'No recent notices available'}
                   </div>
-                ));
-              })()}
-            </div>
-          </div>
+                ) : (
+                  activeDashboardNotices.map((notice) => (
+                    <div
+                      key={notice.id}
+                      className={`p-3.5 rounded-xl border text-sm ${
+                        notice.isPinned
+                          ? 'border-indigo-500/30 bg-indigo-500/[0.06] text-slate-900 dark:text-slate-100'
+                          : notice.priority === 'High'
+                          ? 'bg-rose-500/[0.06] border-rose-500/20 text-slate-900 dark:text-slate-100'
+                          : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <span className="font-bold line-clamp-1 flex items-center gap-1.5">
+                          {notice.isPinned && <Pin size={12} className="text-indigo-500 shrink-0 rotate-45" />}
+                          {notice.title}
+                        </span>
+                        <span className={`text-[11px] font-bold shrink-0 ${
+                          notice.isPinned
+                            ? 'text-indigo-600 dark:text-indigo-400'
+                            : notice.priority === 'High'
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-slate-500 dark:text-slate-400'
+                        }`}>
+                          {notice.isPinned
+                            ? (isBangla ? 'পিন্ড' : 'Pinned')
+                            : (isBangla
+                                ? (notice.priority === 'High' ? 'জরুরি' : notice.priority === 'Medium' ? 'মাঝারি' : 'সাধারণ')
+                                : notice.priority)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-2 leading-relaxed">
+                        {notice.description}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>{notice.authorName}</span>
+                        <span aria-hidden="true">·</span>
+                        <span className="tabular-nums">{notice.date}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
 
-          {/* RECENT ACTIVITIES COMPONENT */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
-            <h3 className="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-              <History size={18} className="text-slate-400" /> Recent Activities
-            </h3>
-            
-            <div className="space-y-4">
-              {activities.slice(0, 3).map((activity) => (
-                <div key={activity.id} className="flex gap-3 text-xs">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-1.5"></div>
-                  <div>
-                    <p className="text-slate-800 dark:text-slate-200">
-                      <span className="font-semibold text-slate-950 dark:text-white">{activity.userName}</span>{' '}
-                      {activity.action}
-                    </p>
-                    <p className="text-slate-500 dark:text-slate-400 mt-0.5">{activity.details}</p>
-                    <span className="text-[10px] text-slate-400 mt-1 block">
-                      {new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {onNavigateTab && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab('Notices')}
+                    className="w-full py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5 rounded-xl transition cursor-pointer inline-flex items-center justify-center gap-1"
+                  >
+                    <span>{isBangla ? 'সব নোটিশ দেখুন' : 'View All Notices'}</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: RECENT ACTIVITIES */}
+            {activeFeedTab === 'activities' && (
+              <div className="space-y-3">
+                {activities.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 font-medium border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                    {isBangla ? 'এখনো কোনো কার্যক্রম রেকর্ড হয়নি' : 'No recent activity recorded yet'}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {activities.slice(0, 4).map((activity) => (
+                      <div key={activity.id} className="pb-3 border-b border-slate-100 dark:border-slate-800 last:border-0 last:pb-0 text-xs">
+                        <p className="text-slate-800 dark:text-slate-200 leading-relaxed">
+                          <span className="font-bold text-slate-950 dark:text-white">{activity.userName}</span>{' '}
+                          {activity.action}
+                        </p>
+                        <p className="text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">{activity.details}</p>
+                        <span className="text-[11px] text-slate-400 mt-1 block tabular-nums">
+                          {new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {isManagerOrAdmin && onNavigateTab && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab('AuditLogs')}
+                    className="w-full py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5 rounded-xl transition cursor-pointer inline-flex items-center justify-center gap-1"
+                  >
+                    <span>{isBangla ? 'পূর্ণ অডিট লগ দেখুন' : 'View Audit Logs'}</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: MONTHLY HIGHLIGHTS */}
+            {activeFeedTab === 'highlights' && (
+              <div className="space-y-2.5">
+                {mostMealsRecord && (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        {isBangla ? 'সর্বোচ্চ মিল' : 'Most Meals'}
+                      </p>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{mostMealsRecord.user.name}</p>
+                    </div>
+                    <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums font-mono shrink-0">
+                      {mostMealsRecord.total} {isBangla ? 'মিল' : 'meals'}
                     </span>
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+
+                {leastMealsRecord && sortedMembersByMeals.length > 1 && (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        {isBangla ? 'সর্বনিম্ন মিল' : 'Least Meals'}
+                      </p>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{leastMealsRecord.user.name}</p>
+                    </div>
+                    <span className="text-xs font-extrabold text-slate-600 dark:text-slate-300 tabular-nums font-mono shrink-0">
+                      {leastMealsRecord.total} {isBangla ? 'মিল' : 'meals'}
+                    </span>
+                  </div>
+                )}
+
+                {highestExpenseRecord && (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                    <div className="min-w-0 pr-2">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        {isBangla ? 'সর্বোচ্চ একক খরচ' : 'Highest Expense'}
+                      </p>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate" title={highestExpenseRecord.title}>
+                        {highestExpenseRecord.title}
+                      </p>
+                    </div>
+                    <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400 tabular-nums font-mono shrink-0">
+                      {settings.currency}{highestExpenseRecord.amount.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                {highestDepositRecord && (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        {isBangla ? 'সর্বোচ্চ ডিপোজিট' : 'Top Deposit'}
+                      </p>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{highestDepositRecord.userName}</p>
+                    </div>
+                    <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 tabular-nums font-mono shrink-0">
+                      {settings.currency}{highestDepositRecord.amount.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                {onNavigateTab && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateTab('Reports')}
+                    className="w-full py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5 rounded-xl transition cursor-pointer inline-flex items-center justify-center gap-1"
+                  >
+                    <span>{isBangla ? 'পূর্ণ মাসিক রিপোর্ট' : 'Full Monthly Report'}</span>
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+              </div>
+            )}
+
           </div>
 
         </div>

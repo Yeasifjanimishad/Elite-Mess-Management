@@ -178,7 +178,7 @@ export default function UsersTab({
               {filteredUsers.map((user) => (
                 <tr 
                   key={user.id} 
-                  className={`border-b border-slate-100 dark:border-slate-800 text-xs text-slate-750 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition ${
+                  className={`border-b border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition ${
                     !user.isActive ? 'opacity-60 bg-slate-50/20 dark:bg-slate-900/20' : ''
                   }`}
                 >
@@ -193,7 +193,7 @@ export default function UsersTab({
                         referrerPolicy="no-referrer"
                       />
                       <div>
-                        <span className="font-bold text-slate-850 dark:text-white text-sm block">{user.name}</span>
+                        <span className="font-bold text-slate-900 dark:text-white text-sm block">{user.name}</span>
                         <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 block">UID: {user.id}</span>
                       </div>
                     </div>
@@ -309,7 +309,7 @@ export default function UsersTab({
             
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-850 dark:text-white">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                   Register New Mess Member
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -433,7 +433,7 @@ export default function UsersTab({
             
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-850 dark:text-white">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                   Adjust Member Profile
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">

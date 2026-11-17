@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Bell, 
   Check, 
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { AppNotification, User, SystemSettings, MemberMealSheet } from '../types';
 import { useFeedback } from './FeedbackContext';
+import { getRealCurrentMonth, getEffectiveDatesForMonth } from '../utils/dateUtils';
 
 interface NotificationCenterProps {
   notifications: AppNotification[];
@@ -36,6 +37,7 @@ interface NotificationCenterProps {
   isOpen: boolean;
   onClose: () => void;
   currency: string;
+  activeMonth?: string;
 }
 
 export default function NotificationCenter({
@@ -53,17 +55,25 @@ export default function NotificationCenter({
   onNavigateTab,
   isOpen,
   onClose,
-  currency
+  currency,
+  activeMonth
 }: NotificationCenterProps) {
   const { showToast } = useFeedback();
   const [filter, setFilter] = useState<'All' | 'Unread'>('All');
   const [activeTab, setActiveTab] = useState<'list' | 'trigger'>('list');
 
+  const resolvedMonth = activeMonth || getRealCurrentMonth();
+  const { tomorrow } = getEffectiveDatesForMonth(resolvedMonth);
+
   // Triggering form states
   const [mealTarget, setMealTarget] = useState<string>('all');
-  const [bazaarDate, setBazaarDate] = useState<string>('2026-07-19');
+  const [bazaarDate, setBazaarDate] = useState<string>(tomorrow);
   const [depositTarget, setDepositTarget] = useState<string>('all');
   const [customDepositNote, setCustomDepositNote] = useState<string>('');
+
+  useEffect(() => {
+    setBazaarDate(tomorrow);
+  }, [tomorrow]);
 
   // Filter notifications relevant to current user
   // (Broadcasts, or specifically targeted to this user)
@@ -249,7 +259,7 @@ export default function NotificationCenter({
                   onClick={() => setFilter('All')}
                   className={`px-3 py-1 rounded-lg text-xs font-extrabold transition ${
                     filter === 'All' 
-                      ? 'bg-slate-250 text-slate-800 dark:bg-slate-800 dark:text-white' 
+                      ? 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-white' 
                       : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
@@ -297,7 +307,7 @@ export default function NotificationCenter({
             <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/40">
               {filteredNotifications.length === 0 ? (
                 <div className="py-20 px-6 text-center">
-                  <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800/60 flex items-center justify-center mx-auto mb-3 text-slate-350">
+                  <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800/60 flex items-center justify-center mx-auto mb-3 text-slate-300">
                     <Bell size={20} />
                   </div>
                   <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">No alerts found</h4>
@@ -343,7 +353,7 @@ export default function NotificationCenter({
                           e.stopPropagation();
                           onMarkAsRead(n.id);
                         }}
-                        className="opacity-0 group-hover:opacity-100 absolute right-3 top-3 p-1 rounded-md hover:bg-slate-150 dark:hover:bg-slate-800 text-slate-400 hover:text-emerald-500 transition"
+                        className="opacity-0 group-hover:opacity-100 absolute right-3 top-3 p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-emerald-500 transition"
                         title="Mark as read"
                       >
                         <Check size={14} />
@@ -370,7 +380,7 @@ export default function NotificationCenter({
             </div>
 
             {/* 1. DISPATCH MEAL REMINDER */}
-            <form onSubmit={handleSendMealReminderSubmit} className="space-y-3 p-4.5 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-100 dark:border-slate-800">
+            <form onSubmit={handleSendMealReminderSubmit} className="space-y-3 p-4.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800">
               <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                 <Utensils size={14} className="text-amber-500" /> Dispatch Meal Reminder
               </h4>
@@ -380,7 +390,7 @@ export default function NotificationCenter({
                 <select
                   value={mealTarget}
                   onChange={(e) => setMealTarget(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-750 bg-white dark:bg-slate-900 px-3 py-2 text-slate-700 dark:text-slate-250 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 >
                   <option value="all">Broadcast to All Active Members</option>
                   {allUsers.filter(u => u.isActive).map(u => (
@@ -398,7 +408,7 @@ export default function NotificationCenter({
             </form>
 
             {/* 2. DISPATCH BAZAAR DUTY REMINDER */}
-            <form onSubmit={handleSendBazaarReminderSubmit} className="space-y-3 p-4.5 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-100 dark:border-slate-800">
+            <form onSubmit={handleSendBazaarReminderSubmit} className="space-y-3 p-4.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800">
               <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                 <ShoppingBag size={14} className="text-indigo-500" /> Dispatch Bazaar Duty Alert
               </h4>
@@ -410,7 +420,7 @@ export default function NotificationCenter({
                     type="date"
                     value={bazaarDate}
                     onChange={(e) => setBazaarDate(e.target.value)}
-                    className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-750 bg-white dark:bg-slate-900 px-3 py-2 text-slate-700 dark:text-slate-250 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     required
                   />
                 </div>
@@ -429,7 +439,7 @@ export default function NotificationCenter({
             </form>
 
             {/* 3. DISPATCH DEPOSIT / LOW BALANCE REMINDER */}
-            <form onSubmit={handleSendDepositReminderSubmit} className="space-y-3 p-4.5 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-100 dark:border-slate-800">
+            <form onSubmit={handleSendDepositReminderSubmit} className="space-y-3 p-4.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800">
               <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                 <DollarSign size={14} className="text-emerald-500" /> Dispatch Deposit Request
               </h4>
@@ -439,7 +449,7 @@ export default function NotificationCenter({
                 <select
                   value={depositTarget}
                   onChange={(e) => setDepositTarget(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-750 bg-white dark:bg-slate-900 px-3 py-2 text-slate-700 dark:text-slate-250 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 >
                   <option value="all">Broadcast to All Mess Members</option>
                   {allUsers.filter(u => u.isActive).map(u => (
@@ -455,7 +465,7 @@ export default function NotificationCenter({
                   placeholder="e.g. Please deposit 1500 BDT to balance account"
                   value={customDepositNote}
                   onChange={(e) => setCustomDepositNote(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-750 bg-white dark:bg-slate-900 px-3 py-2 text-slate-700 dark:text-slate-250 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
 
