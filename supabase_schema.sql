@@ -80,7 +80,12 @@ CREATE INDEX idx_meals_user_date ON meals(user_id, date);
 CREATE TABLE bazaar_entries (
     id BIGSERIAL PRIMARY KEY,
     mess_id UUID REFERENCES messes(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     date DATE NOT NULL,
+    items TEXT DEFAULT 'Bazaar Expense' NOT NULL,
+    quantity TEXT DEFAULT '1' NOT NULL,
+    price NUMERIC(12,2) DEFAULT 0.00 NOT NULL,
+    subtotal NUMERIC(12,2) DEFAULT 0.00 NOT NULL,
     notes TEXT,
     status TEXT DEFAULT 'Pending' NOT NULL CHECK (status IN ('Pending', 'Approved', 'Rejected')),
     approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -164,6 +169,8 @@ CREATE TABLE notices (
     date DATE NOT NULL,
     author_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     attachment TEXT,
+    expiry_date DATE,
+    is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -445,8 +452,11 @@ CREATE POLICY "Allow read access to settings in same mess" ON system_settings
         mess_id = public.get_my_mess_id()
     );
 
-CREATE POLICY "Allow admins/managers to update settings" ON system_settings
-    FOR UPDATE USING (
+CREATE POLICY "Allow admins/managers to manage settings" ON system_settings
+    FOR ALL USING (
+        mess_id = public.get_my_mess_id()
+    )
+    WITH CHECK (
         mess_id = public.get_my_mess_id()
     );
 
@@ -485,11 +495,25 @@ CREATE POLICY "Allow read access to notifications in same mess" ON notifications
         AND (target_user_id IS NULL OR target_user_id = auth.uid())
     );
 
+CREATE POLICY "Allow inserting notifications in same mess" ON notifications
+    FOR INSERT WITH CHECK (
+        mess_id = public.get_my_mess_id()
+    );
+
 CREATE POLICY "Allow updating notification read status" ON notifications
     FOR UPDATE USING (
         mess_id = public.get_my_mess_id()
         AND (target_user_id IS NULL OR target_user_id = auth.uid())
     );
+
+CREATE POLICY "Allow deleting own notifications in same mess" ON notifications
+    FOR DELETE USING (
+        mess_id = public.get_my_mess_id()
+        AND (target_user_id = auth.uid() OR public.get_my_role() IN ('Admin', 'Meal Manager'))
+    );
+
+-- Enable Supabase Realtime for live cross-device sync
+ALTER PUBLICATION supabase_realtime ADD TABLE users, meals, bazaar_entries, deposits, expenses, notices, notifications, system_settings, vacation_periods, activity_logs;
 
 
 -- ==========================================================
