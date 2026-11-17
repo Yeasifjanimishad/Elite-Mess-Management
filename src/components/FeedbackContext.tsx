@@ -260,7 +260,7 @@ export default function FeedbackProvider({ children }: FeedbackProviderProps) {
                     if (confirmConfig.onCancel) confirmConfig.onCancel();
                     setConfirmConfig(null);
                   }}
-                  className="px-4 py-2.5 rounded-xl border border-slate-150 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 transition cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
                 >
                   {confirmConfig.cancelLabel || 'Cancel'}
                 </button>

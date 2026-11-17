@@ -48,7 +48,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-800 dark:text-slate-200">
-          <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-100 dark:border-slate-850 shadow-2xl space-y-6 text-center animate-slide-up">
+          <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-100 dark:border-slate-800 shadow-2xl space-y-6 text-center animate-slide-up">
             
             {/* Visual Header */}
             <div className="mx-auto w-16 h-16 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center shadow-inner">
@@ -66,7 +66,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
             {/* Error Message Box */}
             {this.state.error && (
-              <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-150 dark:border-slate-800 rounded-2xl p-4 text-left space-y-2 max-h-48 overflow-y-auto">
+              <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 text-left space-y-2 max-h-48 overflow-y-auto">
                 <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest block">
                   Exception Details
                 </span>
@@ -85,7 +85,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 onClick={this.handleCopyError}
-                className="px-4 py-3 rounded-xl border border-slate-150 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 transition duration-150 flex items-center justify-center gap-2"
+                className="px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition duration-150 flex items-center justify-center gap-2"
               >
                 <Clipboard size={14} /> Copy Specs
               </button>

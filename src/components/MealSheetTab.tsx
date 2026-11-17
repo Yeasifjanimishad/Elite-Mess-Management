@@ -9,9 +9,14 @@ import {
   Minus,
   Save,
   Lock,
+  Unlock,
+  Plane,
+  AlertCircle,
+  Info,
   CalendarDays,
   FileSpreadsheet,
-  Search
+  Search,
+  Keyboard
 } from 'lucide-react';
 import { User, MemberMealSheet, MealStatus, SystemSettings, VacationPeriod } from '../types';
 import { useFeedback } from './FeedbackContext';
@@ -20,6 +25,7 @@ import {
   getDaysInMonth,
   getMonthDates,
   formatMonthLabel,
+  formatDateDisplay,
   getEffectiveDatesForMonth,
   getMonthPickerOptions
 } from '../utils/dateUtils';
@@ -219,8 +225,8 @@ export default function MealSheetTab({
     let textColorClass = '';
 
     if (isUserVacationActive) {
-      bgColorClass = 'bg-sky-50 dark:bg-sky-950/25 hover:bg-sky-100 dark:hover:bg-sky-950/45 border-sky-200/50';
-      textColorClass = 'text-sky-600 dark:text-sky-450 font-bold';
+      bgColorClass = 'bg-sky-50 dark:bg-sky-950/30 hover:bg-sky-100 dark:hover:bg-sky-950/50 border-sky-200/70 dark:border-sky-800/60';
+      textColorClass = 'text-sky-600 dark:text-sky-400 font-bold';
       cellLabel = '✈ VAC';
     } else if (isLocked) {
       bgColorClass = 'bg-slate-100 dark:bg-slate-800/60 hover:bg-slate-200/50 dark:hover:bg-slate-800/70 border-slate-200 dark:border-slate-800';
@@ -472,54 +478,67 @@ export default function MealSheetTab({
   });
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6" id="mealsheet-tab">
-      
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <FileSpreadsheet className="text-emerald-600 dark:text-emerald-400" size={22} />
-            Digital Meal Sheet ({formatMonthLabel(selectedMonth, settings.language)})
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {isManagerOrAdmin 
-              ? 'Grid representation of the entire mess. Click on any cell to override meal reservations or guest allocations.' 
-              : 'Your personal row in the system grid. Displays daily status and accumulated monthly meals.'}
-          </p>
+    <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5" id="mealsheet-tab">
+
+      {/* Header & Legend */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <FileSpreadsheet size={20} />
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+              {isBangla ? `মিল শিট · ${formatMonthLabel(selectedMonth, settings.language)}` : `Digital Meal Sheet · ${formatMonthLabel(selectedMonth, settings.language)}`}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+              {isManagerOrAdmin
+                ? (isBangla
+                    ? 'সকল মেম্বারের মাসিক মিল। যেকোনো ঘরের মিল বা গেস্ট সংখ্যা পরিবর্তন করতে ক্লিক করুন।'
+                    : 'Click any cell to adjust a member’s meals or guest counts for that day.')
+                : (isBangla
+                    ? 'আপনার দৈনিক মিলের তালিকা। আনলক থাকা দিনে ক্লিক করে মিল পরিবর্তন করুন।'
+                    : 'Your monthly meal schedule. Click an unlocked day to update your meals.')}
+            </p>
+          </div>
         </div>
-        
+
         {/* Color Legend */}
-        <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium bg-slate-50 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-800 px-3.5 py-2 rounded-xl">
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded bg-emerald-500/20 border border-emerald-500/30"></span>
-            <span className="text-slate-600 dark:text-slate-400">Full (Green)</span>
+            <span className="w-3 h-3 rounded bg-emerald-500/25 border border-emerald-500/40" />
+            <span className="text-slate-600 dark:text-slate-300">{isBangla ? 'পূর্ণ' : 'Full'}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded bg-amber-500/20 border border-amber-500/30"></span>
-            <span className="text-slate-600 dark:text-slate-400">Partial (Yellow)</span>
+            <span className="w-3 h-3 rounded bg-amber-500/25 border border-amber-500/40" />
+            <span className="text-slate-600 dark:text-slate-300">{isBangla ? 'আংশিক' : 'Partial'}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded bg-rose-500/20 border border-rose-500/30"></span>
-            <span className="text-slate-600 dark:text-slate-400">OFF (Red)</span>
+            <span className="w-3 h-3 rounded bg-rose-500/25 border border-rose-500/40" />
+            <span className="text-slate-600 dark:text-slate-300">{isBangla ? 'বন্ধ' : 'OFF'}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-250 dark:border-slate-700"></span>
-            <span className="text-slate-600 dark:text-slate-400">Locked (Gray)</span>
+            <span className="w-3 h-3 rounded bg-sky-500/25 border border-sky-500/40" />
+            <span className="text-slate-600 dark:text-slate-300">{isBangla ? 'ছুটি' : 'Vacation'}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600" />
+            <span className="text-slate-600 dark:text-slate-300">{isBangla ? 'লকড' : 'Locked'}</span>
           </div>
         </div>
       </div>
 
       {/* SEARCH AND FILTER INTERFACE PANEL */}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-        <div className="flex flex-1 flex-col sm:flex-row gap-3 max-w-2xl">
+        <div className="flex flex-1 flex-col sm:flex-row gap-2.5 max-w-2xl">
           {/* Search bar */}
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
             <input
               type="text"
-              placeholder="Search members by name..."
+              placeholder={isBangla ? 'নাম দিয়ে মেম্বার খুঁজুন...' : 'Search members by name...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full pl-9 pr-4 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-500"
             />
           </div>
 
@@ -528,7 +547,7 @@ export default function MealSheetTab({
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-slate-800 dark:text-white font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-500 cursor-pointer"
             >
               {monthOptions.map(m => (
                 <option key={m} value={m}>
@@ -540,35 +559,39 @@ export default function MealSheetTab({
         </div>
 
         {/* Keyboard interaction tips */}
-        <div className="text-[10px] font-bold text-slate-450 dark:text-slate-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 px-3 py-1.5 rounded-lg">
-          <span className="text-emerald-500">⌨️ Tip:</span>
-          <span>Click sheet. Use arrow keys to navigate. Space/Enter to edit.</span>
+        <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-800 px-3 py-2 rounded-xl">
+          <Keyboard size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>{isBangla ? 'অ্যারো কী দিয়ে ঘুরুন, Enter/Space দিয়ে এডিট করুন' : 'Use arrow keys to move, Enter or Space to edit'}</span>
         </div>
       </div>
 
       {/* HORIZONTALLY & VERTICALLY SCROLLABLE TABLE CONTAINER */}
-      <div 
-        className="relative max-h-[550px] overflow-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-inner focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+      <div
+        className="relative max-h-[550px] overflow-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/25"
         tabIndex={0}
         onKeyDown={handleTableKeyDown}
         id="sheets-table-container"
       >
         <table className="w-full text-left border-collapse table-fixed min-w-[1400px]">
           <thead>
-            <tr className="bg-slate-50 dark:bg-slate-900/80 text-[11px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
+            <tr className="bg-slate-50 dark:bg-slate-950 text-[11px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">
               {/* Sticky Top-Left Corner cell */}
-              <th className="sticky left-0 top-0 z-35 w-44 px-4 py-3 bg-slate-100 dark:bg-slate-950 border-r border-b border-slate-200 dark:border-slate-850 text-slate-800 dark:text-white font-bold shadow-sm">
-                Members
+              <th className="sticky left-0 top-0 z-35 w-44 px-4 py-3 bg-slate-100 dark:bg-slate-950 border-r border-b border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white font-bold">
+                {isBangla ? 'মেম্বার' : 'Members'}
               </th>
-              
+
               {/* Sticky Dates Columns */}
               {dates.map((date, index) => {
                 const dayNum = index + 1;
                 const isToday = date === today;
                 return (
-                  <th 
-                    key={date} 
-                    className={`sticky top-0 z-20 w-12 px-1 py-3 text-center border-b border-r border-slate-200 dark:border-slate-855 bg-slate-100 dark:bg-slate-950 ${isToday ? 'text-emerald-600 dark:text-emerald-405 font-extrabold ring-1 ring-emerald-500/20' : 'text-slate-600 dark:text-slate-400'}`}
+                  <th
+                    key={date}
+                    className={`sticky top-0 z-20 w-12 px-1 py-3 text-center border-b border-r border-slate-200 dark:border-slate-800 tabular-nums ${
+                      isToday
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-extrabold'
+                        : 'bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400'
+                    }`}
                   >
                     {dayNum}
                   </th>
@@ -576,16 +599,22 @@ export default function MealSheetTab({
               })}
 
               {/* Sticky Summary columns */}
-              <th className="sticky top-0 z-20 w-20 px-2 py-3 text-center text-slate-700 dark:text-slate-300 border-r border-b border-slate-200 dark:border-slate-855 bg-slate-100 dark:bg-slate-950">Own</th>
-              <th className="sticky top-0 z-20 w-20 px-2 py-3 text-center text-slate-700 dark:text-slate-300 border-r border-b border-slate-200 dark:border-slate-855 bg-slate-100 dark:bg-slate-950">Guest</th>
-              <th className="sticky top-0 z-20 w-24 px-2 py-3 text-center text-emerald-700 dark:text-emerald-405 border-b border-slate-200 dark:border-slate-855 bg-slate-100 dark:bg-slate-950">Final</th>
+              <th className="sticky top-0 z-20 w-20 px-2 py-3 text-center text-slate-700 dark:text-slate-300 border-r border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                {isBangla ? 'নিজ' : 'Own'}
+              </th>
+              <th className="sticky top-0 z-20 w-20 px-2 py-3 text-center text-slate-700 dark:text-slate-300 border-r border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                {isBangla ? 'অতিথি' : 'Guest'}
+              </th>
+              <th className="sticky top-0 z-20 w-24 px-2 py-3 text-center text-emerald-700 dark:text-emerald-400 border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950">
+                {isBangla ? 'মোট' : 'Final'}
+              </th>
             </tr>
           </thead>
           <tbody>
             {visibleMeals.length === 0 ? (
               <tr>
-                <td colSpan={dates.length + 4} className="px-6 py-12 text-center text-xs text-slate-400 italic bg-white dark:bg-slate-900">
-                  No members matched your search.
+                <td colSpan={dates.length + 4} className="px-6 py-12 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900">
+                  {isBangla ? 'কোনো মেম্বার পাওয়া যায়নি।' : 'No members matched your search.'}
                 </td>
               </tr>
             ) : (
@@ -594,17 +623,17 @@ export default function MealSheetTab({
                 const totals = calculateRowTotals(sheet);
 
                 return (
-                  <tr 
-                    key={sheet.userId} 
-                    className="border-b border-slate-150 dark:border-slate-850 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition"
+                  <tr
+                    key={sheet.userId}
+                    className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors"
                   >
                     {/* Sticky left member cell */}
-                    <td className="sticky left-0 z-10 px-4 py-3 bg-white dark:bg-slate-900 border-r border-slate-150 dark:border-slate-850 font-semibold text-slate-800 dark:text-white shadow-sm">
+                    <td className="sticky left-0 z-10 px-4 py-2.5 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 font-semibold text-slate-800 dark:text-white">
                       <div className="flex items-center gap-2.5">
-                        <img 
-                          src={u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} 
-                          alt={u.name} 
-                          className="w-6 h-6 rounded-full object-cover"
+                        <img
+                          src={u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'}
+                          alt={u.name}
+                          className="w-6 h-6 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-700 shrink-0"
                           referrerPolicy="no-referrer"
                         />
                         <span className="font-semibold truncate text-slate-800 dark:text-white max-w-[110px]" title={u.name}>{u.name}</span>
@@ -619,35 +648,35 @@ export default function MealSheetTab({
                       const canEdit = isManagerOrAdmin || (sheet.userId === currentUser.id && !checkIsLockedForMember(date).locked);
 
                       return (
-                        <td 
+                        <td
                           key={date}
                           onClick={() => handleCellClick(sheet, u.name, date)}
-                          className={`text-center py-2.5 px-0.5 border-r border-slate-150 dark:border-slate-855 select-none cursor-pointer group/cell relative ${bgColorClass} ${textColorClass} ${isCellFocused ? 'ring-2 ring-emerald-500/80 ring-offset-1 dark:ring-offset-slate-900 z-10 relative scale-105 shadow-md font-black' : ''} ${isToday && !isCellFocused ? 'ring-1 ring-emerald-500/30' : ''}`}
-                          title="Click to view details or edit"
+                          className={`text-center py-2.5 px-0.5 border-r border-slate-100 dark:border-slate-800 select-none cursor-pointer group/cell relative ${bgColorClass} ${textColorClass} ${isCellFocused ? 'ring-2 ring-emerald-500 ring-offset-1 dark:ring-offset-slate-900 z-10 relative font-black' : ''} ${isToday && !isCellFocused ? 'ring-1 ring-inset ring-emerald-500/35' : ''}`}
+                          title={isBangla ? 'বিস্তারিত দেখতে বা এডিট করতে ক্লিক করুন' : 'Click to view details or edit'}
                         >
                           <span className="font-bold text-[10px]">{cellLabel}</span>
-                          
+
                           {/* Elegant Hover Breakdown Tooltip */}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-950 text-slate-200 text-[10px] rounded-lg p-2.5 opacity-0 pointer-events-none group-hover/cell:opacity-100 transition-opacity duration-200 z-50 shadow-xl border border-slate-800">
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-950 text-slate-200 text-[10px] rounded-xl p-2.5 opacity-0 pointer-events-none group-hover/cell:opacity-100 transition-opacity duration-150 z-50 shadow-xl border border-slate-800">
                             <p className="font-bold border-b border-slate-800 pb-1 mb-1.5 text-white flex justify-between">
                               <span>{formatMonthLabel(selectedMonth, settings.language)} {date.split('-')[2]}</span>
                               {isLocked && <Lock size={10} className="text-slate-400" />}
                             </p>
                             <div className="grid grid-cols-2 gap-y-1 text-[10px]">
-                              <span className="text-slate-400">Breakfast:</span>
+                              <span className="text-slate-400">{isBangla ? 'সকাল:' : 'Breakfast:'}</span>
                               <span className="font-medium text-right">{dayMeal.breakfast ? 'ON (0.5)' : 'OFF'}</span>
-                              <span className="text-slate-400">Lunch:</span>
+                              <span className="text-slate-400">{isBangla ? 'দুপুর:' : 'Lunch:'}</span>
                               <span className="font-medium text-right">{dayMeal.lunch ? 'ON (1.0)' : 'OFF'}</span>
-                              <span className="text-slate-400">Dinner:</span>
+                              <span className="text-slate-400">{isBangla ? 'রাত:' : 'Dinner:'}</span>
                               <span className="font-medium text-right">{dayMeal.dinner ? 'ON (1.0)' : 'OFF'}</span>
-                              <span className="text-slate-400 border-t border-slate-800 pt-1 mt-0.5">Guests (B/L/D):</span>
+                              <span className="text-slate-400 border-t border-slate-800 pt-1 mt-0.5">{isBangla ? 'অতিথি:' : 'Guests (B/L/D):'}</span>
                               <span className="font-medium text-right border-t border-slate-800 pt-1 mt-0.5">
                                 {dayMeal.guestBreakfast}/{dayMeal.guestLunch}/{dayMeal.guestDinner}
                               </span>
                             </div>
                             {canEdit && !settings.isMonthClosed && (
                               <p className="text-[9px] text-emerald-400 mt-2 font-semibold text-center flex items-center justify-center gap-1">
-                                <Edit3 size={9} /> Click to adjust
+                                <Edit3 size={9} /> {isBangla ? 'এডিট করতে ক্লিক করুন' : 'Click to adjust'}
                               </p>
                             )}
                           </div>
@@ -656,13 +685,13 @@ export default function MealSheetTab({
                     })}
 
                     {/* Summaries cells */}
-                    <td className="px-2 py-3 text-center border-r border-slate-150 dark:border-slate-855 font-bold text-slate-600 dark:text-slate-400 bg-slate-50/30 dark:bg-slate-900/10">
+                    <td className="px-2 py-2.5 text-center border-r border-slate-100 dark:border-slate-800 font-semibold text-slate-600 dark:text-slate-300 bg-slate-50/40 dark:bg-slate-800/20 tabular-nums">
                       {totals.totalMeals.toFixed(1)}
                     </td>
-                    <td className="px-2 py-3 text-center border-r border-slate-150 dark:border-slate-855 font-bold text-slate-600 dark:text-slate-400 bg-slate-50/30 dark:bg-slate-900/10">
+                    <td className="px-2 py-2.5 text-center border-r border-slate-100 dark:border-slate-800 font-semibold text-slate-600 dark:text-slate-300 bg-slate-50/40 dark:bg-slate-800/20 tabular-nums">
                       {totals.totalGuestMeals.toFixed(1)}
                     </td>
-                    <td className="px-2 py-3 text-center font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/5">
+                    <td className="px-2 py-2.5 text-center font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/8 tabular-nums">
                       {totals.finalMeals.toFixed(1)}
                     </td>
                   </tr>
@@ -673,11 +702,11 @@ export default function MealSheetTab({
 
           {/* Sticky Bottom Row for Column Totals */}
           {visibleMeals.length > 0 && (
-            <tfoot className="sticky bottom-0 z-25 bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-              <tr className="text-[11px] font-black uppercase text-slate-800 dark:text-slate-200 tracking-wider">
+            <tfoot className="sticky bottom-0 z-25 bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
+              <tr className="text-[11px] font-bold uppercase text-slate-800 dark:text-slate-200 tracking-wider">
                 {/* Sticky Left footer label cell */}
-                <td className="sticky left-0 bottom-0 z-30 px-4 py-3 bg-slate-150 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 font-extrabold text-slate-800 dark:text-white shadow-sm">
-                  Daily Totals
+                <td className="sticky left-0 bottom-0 z-30 px-4 py-3 bg-slate-100 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 font-extrabold text-slate-800 dark:text-white">
+                  {isBangla ? 'দৈনিক মোট' : 'Daily Totals'}
                 </td>
 
                 {/* Dynamically calculated daily totals columns */}
@@ -685,22 +714,26 @@ export default function MealSheetTab({
                   const colTotals = calculateDailyColumnTotals(date);
                   const isToday = date === today;
                   return (
-                    <td 
+                    <td
                       key={`foot-${date}`}
-                      className={`text-center py-2.5 px-0.5 border-r border-slate-200 dark:border-slate-800 font-extrabold text-[10px] group/foot relative ${isToday ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-405' : 'text-slate-700 dark:text-slate-300'}`}
+                      className={`text-center py-2.5 px-0.5 border-r border-slate-200 dark:border-slate-800 font-bold text-[10px] group/foot relative tabular-nums ${
+                        isToday ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'
+                      }`}
                     >
                       {colTotals.finalTotal.toFixed(1)}
 
                       {/* Daily Totals Tooltip */}
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-36 bg-slate-950 text-slate-200 text-[10px] rounded-lg p-2.5 opacity-0 pointer-events-none group-hover/foot:opacity-100 transition-opacity duration-200 z-50 shadow-2xl border border-slate-800">
-                        <p className="font-bold border-b border-slate-800 pb-1 mb-1.5 text-white text-center">Meals Count</p>
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-36 bg-slate-950 text-slate-200 text-[10px] rounded-xl p-2.5 opacity-0 pointer-events-none group-hover/foot:opacity-100 transition-opacity duration-150 z-50 shadow-2xl border border-slate-800">
+                        <p className="font-bold border-b border-slate-800 pb-1 mb-1.5 text-white text-center">
+                          {isBangla ? 'মিল সংখ্যা' : 'Meals Count'}
+                        </p>
                         <div className="space-y-1">
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Own:</span>
+                            <span className="text-slate-400">{isBangla ? 'নিজ:' : 'Own:'}</span>
                             <span className="font-bold text-white">{colTotals.ownTotal.toFixed(1)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Guests:</span>
+                            <span className="text-slate-400">{isBangla ? 'অতিথি:' : 'Guests:'}</span>
                             <span className="font-bold text-white">{colTotals.guestTotal.toFixed(1)}</span>
                           </div>
                         </div>
@@ -710,13 +743,13 @@ export default function MealSheetTab({
                 })}
 
                 {/* Overall Totals */}
-                <td className="px-2 py-3 text-center border-r border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold bg-slate-150/40 dark:bg-slate-900/30">
+                <td className="px-2 py-3 text-center border-r border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold bg-slate-100/70 dark:bg-slate-900/50 tabular-nums">
                   {visibleMeals.reduce((acc, sheet) => acc + calculateRowTotals(sheet).totalMeals, 0).toFixed(1)}
                 </td>
-                <td className="px-2 py-3 text-center border-r border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold bg-slate-150/40 dark:bg-slate-900/30">
+                <td className="px-2 py-3 text-center border-r border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold bg-slate-100/70 dark:bg-slate-900/50 tabular-nums">
                   {visibleMeals.reduce((acc, sheet) => acc + calculateRowTotals(sheet).totalGuestMeals, 0).toFixed(1)}
                 </td>
-                <td className="px-2 py-3 text-center text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 font-black">
+                <td className="px-2 py-3 text-center text-emerald-700 dark:text-emerald-400 bg-emerald-500/12 font-extrabold tabular-nums">
                   {visibleMeals.reduce((acc, sheet) => acc + calculateRowTotals(sheet).finalMeals, 0).toFixed(1)}
                 </td>
               </tr>
@@ -729,23 +762,25 @@ export default function MealSheetTab({
       {editingCell && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 relative">
-            
+
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div>
-                <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">
-                  Override Reservation
+                <span className="text-[11px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">
+                  {isBangla ? 'মিল পরিবর্তন করুন' : 'Update Meals'}
                 </span>
-                <h3 className="text-lg font-bold text-slate-850 dark:text-white mt-0.5">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
                   {editingCell.userName}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
                   <CalendarDays size={14} className="text-slate-400" />
-                  Date: {editingCell.date}
+                  <span>{formatDateDisplay(editingCell.date, settings.language)}</span>
                 </p>
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={() => setEditingCell(null)}
-                className="p-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 transition cursor-pointer"
+                aria-label="Close modal"
               >
                 <X size={18} />
               </button>
@@ -753,14 +788,18 @@ export default function MealSheetTab({
 
             {/* Editing Form fields */}
             <div className="space-y-5">
-              
+
               {/* MEMBER OWN MEAL SETTINGS */}
               <div>
-                <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2.5">
-                  Member's Reserve Status
+                <h4 className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-2.5">
+                  {isBangla ? 'নিজস্ব মিল (চালু/বন্ধ)' : 'Own Meals'}
                 </h4>
                 <div className="grid grid-cols-3 gap-2">
-                  <label className="flex items-center gap-2 p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <label className={`flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors ${
+                    editingCell.mealsState.breakfast
+                      ? 'border-emerald-500/50 bg-emerald-50/70 dark:bg-emerald-950/30'
+                      : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}>
                     <input
                       type="checkbox"
                       checked={editingCell.mealsState.breakfast}
@@ -771,12 +810,16 @@ export default function MealSheetTab({
                           breakfast: e.target.checked
                         }
                       })}
-                      className="w-4.5 h-4.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
                     />
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Breakfast</span>
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{isBangla ? 'সকাল' : 'Breakfast'}</span>
                   </label>
 
-                  <label className="flex items-center gap-2 p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <label className={`flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors ${
+                    editingCell.mealsState.lunch
+                      ? 'border-emerald-500/50 bg-emerald-50/70 dark:bg-emerald-950/30'
+                      : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}>
                     <input
                       type="checkbox"
                       checked={editingCell.mealsState.lunch}
@@ -787,12 +830,16 @@ export default function MealSheetTab({
                           lunch: e.target.checked
                         }
                       })}
-                      className="w-4.5 h-4.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
                     />
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Lunch</span>
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{isBangla ? 'দুপুর' : 'Lunch'}</span>
                   </label>
 
-                  <label className="flex items-center gap-2 p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <label className={`flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors ${
+                    editingCell.mealsState.dinner
+                      ? 'border-emerald-500/50 bg-emerald-50/70 dark:bg-emerald-950/30'
+                      : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}>
                     <input
                       type="checkbox"
                       checked={editingCell.mealsState.dinner}
@@ -803,26 +850,28 @@ export default function MealSheetTab({
                           dinner: e.target.checked
                         }
                       })}
-                      className="w-4.5 h-4.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
                     />
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Dinner</span>
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">{isBangla ? 'রাত' : 'Dinner'}</span>
                   </label>
                 </div>
               </div>
 
-              {/* GUEST MEAL ALOCATIONS */}
+              {/* GUEST MEAL ALLOCATIONS */}
               <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                  <Users size={14} className="text-slate-400" /> Guest Meal Counts
+                <h4 className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-2.5 flex items-center gap-1.5">
+                  <Users size={14} className="text-slate-400" />
+                  <span>{isBangla ? 'অতিথি মিল সংখ্যা' : 'Guest Meal Counts'}</span>
                 </h4>
-                
-                <div className="space-y-3">
-                  
+
+                <div className="space-y-2.5">
+
                   {/* Breakfast guest */}
-                  <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Guest Breakfast</span>
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 px-3.5 py-2 rounded-xl border border-slate-200/70 dark:border-slate-800">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{isBangla ? 'অতিথি সকাল' : 'Guest Breakfast'}</span>
+                    <div className="flex items-center gap-2.5">
                       <button
+                        type="button"
                         onClick={() => {
                           const current = editingCell.mealsState.guestBreakfast || 0;
                           setEditingCell({
@@ -830,14 +879,15 @@ export default function MealSheetTab({
                             mealsState: { ...editingCell.mealsState, guestBreakfast: Math.max(0, current - 1) }
                           });
                         }}
-                        className="w-7 h-7 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 flex items-center justify-center font-bold"
+                        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center font-bold cursor-pointer"
                       >
                         -
                       </button>
-                      <span className="text-sm font-bold text-slate-850 dark:text-white w-6 text-center">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white w-6 text-center tabular-nums">
                         {editingCell.mealsState.guestBreakfast || 0}
                       </span>
                       <button
+                        type="button"
                         onClick={() => {
                           const current = editingCell.mealsState.guestBreakfast || 0;
                           setEditingCell({
@@ -845,7 +895,7 @@ export default function MealSheetTab({
                             mealsState: { ...editingCell.mealsState, guestBreakfast: Math.min(settings.guestMealLimit, current + 1) }
                           });
                         }}
-                        className="w-7 h-7 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 flex items-center justify-center font-bold"
+                        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center font-bold cursor-pointer"
                       >
                         +
                       </button>
@@ -853,10 +903,11 @@ export default function MealSheetTab({
                   </div>
 
                   {/* Lunch guest */}
-                  <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Guest Lunch</span>
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 px-3.5 py-2 rounded-xl border border-slate-200/70 dark:border-slate-800">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{isBangla ? 'অতিথি দুপুর' : 'Guest Lunch'}</span>
+                    <div className="flex items-center gap-2.5">
                       <button
+                        type="button"
                         onClick={() => {
                           const current = editingCell.mealsState.guestLunch || 0;
                           setEditingCell({
@@ -864,14 +915,15 @@ export default function MealSheetTab({
                             mealsState: { ...editingCell.mealsState, guestLunch: Math.max(0, current - 1) }
                           });
                         }}
-                        className="w-7 h-7 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 flex items-center justify-center font-bold"
+                        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center font-bold cursor-pointer"
                       >
                         -
                       </button>
-                      <span className="text-sm font-bold text-slate-850 dark:text-white w-6 text-center">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white w-6 text-center tabular-nums">
                         {editingCell.mealsState.guestLunch || 0}
                       </span>
                       <button
+                        type="button"
                         onClick={() => {
                           const current = editingCell.mealsState.guestLunch || 0;
                           setEditingCell({
@@ -879,7 +931,7 @@ export default function MealSheetTab({
                             mealsState: { ...editingCell.mealsState, guestLunch: Math.min(settings.guestMealLimit, current + 1) }
                           });
                         }}
-                        className="w-7 h-7 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 flex items-center justify-center font-bold"
+                        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center font-bold cursor-pointer"
                       >
                         +
                       </button>
@@ -887,10 +939,11 @@ export default function MealSheetTab({
                   </div>
 
                   {/* Dinner guest */}
-                  <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 px-3 py-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Guest Dinner</span>
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 px-3.5 py-2 rounded-xl border border-slate-200/70 dark:border-slate-800">
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{isBangla ? 'অতিথি রাত' : 'Guest Dinner'}</span>
+                    <div className="flex items-center gap-2.5">
                       <button
+                        type="button"
                         onClick={() => {
                           const current = editingCell.mealsState.guestDinner || 0;
                           setEditingCell({
@@ -898,14 +951,15 @@ export default function MealSheetTab({
                             mealsState: { ...editingCell.mealsState, guestDinner: Math.max(0, current - 1) }
                           });
                         }}
-                        className="w-7 h-7 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 flex items-center justify-center font-bold"
+                        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center font-bold cursor-pointer"
                       >
                         -
                       </button>
-                      <span className="text-sm font-bold text-slate-850 dark:text-white w-6 text-center">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white w-6 text-center tabular-nums">
                         {editingCell.mealsState.guestDinner || 0}
                       </span>
                       <button
+                        type="button"
                         onClick={() => {
                           const current = editingCell.mealsState.guestDinner || 0;
                           setEditingCell({
@@ -913,7 +967,7 @@ export default function MealSheetTab({
                             mealsState: { ...editingCell.mealsState, guestDinner: Math.min(settings.guestMealLimit, current + 1) }
                           });
                         }}
-                        className="w-7 h-7 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 flex items-center justify-center font-bold"
+                        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center font-bold cursor-pointer"
                       >
                         +
                       </button>
@@ -926,16 +980,16 @@ export default function MealSheetTab({
               {/* MANDATORY REASON FOR MANAGER ADJUSTMENTS */}
               {isManagerOrAdmin && (
                 <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                    Reason for Adjustment <span className="text-rose-500">*</span>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1.5">
+                    {isBangla ? 'পরিবর্তনের কারণ' : 'Reason for Adjustment'} <span className="text-rose-500">*</span>
                   </label>
                   <textarea
                     required
                     rows={2}
-                    placeholder="e.g. Emergency bypass / member requested off manually"
+                    placeholder={isBangla ? 'যেমন: মেম্বারের অনুরোধে অফ করা হয়েছে' : 'e.g. Member requested manual update'}
                     value={editingCell.reason}
                     onChange={(e) => setEditingCell({ ...editingCell, reason: e.target.value })}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-850 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold"
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/25 focus:border-emerald-500 font-medium"
                   />
                 </div>
               )}
@@ -943,18 +997,20 @@ export default function MealSheetTab({
             </div>
 
             {/* Buttons */}
-            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-end gap-2.5 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
               <button
+                type="button"
                 onClick={() => setEditingCell(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
               >
-                Cancel
+                {isBangla ? 'বাতিল' : 'Cancel'}
               </button>
               <button
+                type="button"
                 onClick={handleSaveCell}
-                className="px-4.5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-500/15 transition flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
               >
-                <Save size={14} /> Update Cell
+                <Save size={14} /> {isBangla ? 'সেভ করুন' : 'Update Cell'}
               </button>
             </div>
 
@@ -964,121 +1020,180 @@ export default function MealSheetTab({
 
       {/* MEAL LOCK OVERRIDES AND VACATION MANAGEMENT PANELS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        
-        {/* PANEL 1: VACATION MODE SYSTEM */}
-        <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-150 dark:border-slate-850 p-5 rounded-2xl space-y-4 shadow-xs" id="vacation-panel">
-          <div>
-            <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
-              <CalendarDays className="text-sky-500" size={18} />
-              Vacation Mode Planner
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Add vacation days. All meals during this range become OFF automatically, and original schedule resumes after.
-            </p>
-          </div>
 
-          {/* VACATION MODE ENTRY FORM */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 p-4 rounded-xl space-y-3">
-            <h4 className="text-[10px] font-bold text-slate-550 dark:text-slate-350 uppercase tracking-wider">
-              {editingVacationId ? (isBangla ? 'ছুটি আপডেট করুন' : 'Edit Vacation Sabbatical') : (isBangla ? 'নতুন ছুটি নির্ধারণ' : 'Schedule New Vacation')}
-            </h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Start Date</label>
-                <input
-                  type="date"
-                  min={`${selectedMonth}-01`}
-                  max={`${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`}
-                  value={vacationStart}
-                  onChange={(e) => setVacationStart(e.target.value)}
-                  className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-semibold"
-                />
+        {/* PANEL 1: VACATION MODE SYSTEM */}
+        <div
+          id="vacation-panel"
+          className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between gap-5"
+        >
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-500/12 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
+                <Plane size={19} />
               </div>
               <div>
-                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">End Date</label>
-                <input
-                  type="date"
-                  min={`${selectedMonth}-01`}
-                  max={`${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`}
-                  value={vacationEnd}
-                  onChange={(e) => setVacationEnd(e.target.value)}
-                  className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-semibold"
-                />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
+                  {isBangla ? 'ছুটি ও মিল বন্ধ প্ল্যানার' : 'Vacation Planner'}
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+                  {isBangla
+                    ? 'নির্দিষ্ট তারিখের জন্য মিল অটো বন্ধ রাখুন। ছুটি শেষে আগের শিডিউল আবার চালু হবে।'
+                    : 'Pause all meals for selected dates. Your regular schedule resumes automatically afterward.'}
+                </p>
               </div>
             </div>
 
-            {isManagerOrAdmin && (
-              <div>
-                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Apply to Member</label>
-                <select
-                  value={vacationUser}
-                  onChange={(e) => setVacationUser(e.target.value)}
-                  className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white font-semibold"
-                >
-                  {allUsers.filter(u => u.isActive).map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
+            {/* VACATION MODE ENTRY FORM */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-xl space-y-3.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <CalendarDays size={14} className="text-sky-500" />
+                  <span>
+                    {editingVacationId
+                      ? (isBangla ? 'ছুটির তারিখ পরিবর্তন করুন' : 'Edit Vacation Dates')
+                      : (isBangla ? 'নতুন ছুটি যোগ করুন' : 'Schedule Vacation')}
+                  </span>
+                </h4>
+                {editingVacationId && (
+                  <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                    {isBangla ? 'এডিট মোড' : 'Editing'}
+                  </span>
+                )}
               </div>
-            )}
 
-            {vacationError && (
-              <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1">
-                ⚠️ {vacationError}
-              </p>
-            )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    {isBangla ? 'শুরুর তারিখ' : 'Start Date'}
+                  </label>
+                  <input
+                    type="date"
+                    min={`${selectedMonth}-01`}
+                    max={`${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`}
+                    value={vacationStart}
+                    onChange={(e) => setVacationStart(e.target.value)}
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/25 focus:border-sky-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    {isBangla ? 'শেষ তারিখ' : 'End Date'}
+                  </label>
+                  <input
+                    type="date"
+                    min={`${selectedMonth}-01`}
+                    max={`${selectedMonth}-${String(daysInMonth).padStart(2, '0')}`}
+                    value={vacationEnd}
+                    onChange={(e) => setVacationEnd(e.target.value)}
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/25 focus:border-sky-500"
+                  />
+                </div>
+              </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={handleCreateVacation}
-                className="flex-1 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
-              >
-                {editingVacationId ? (isBangla ? 'ছুটি আপডেট করুন' : 'Update Vacation') : (isBangla ? 'ছুটি নিশ্চিত করুন' : 'Set Vacation Mode')}
-              </button>
-              {editingVacationId && (
-                <button
-                  onClick={handleCancelEditVacation}
-                  className="py-2 px-3 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold transition"
-                >
-                  {isBangla ? 'বাতিল' : 'Cancel Edit'}
-                </button>
+              {isManagerOrAdmin && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    {isBangla ? 'মেম্বার নির্বাচন করুন' : 'Member'}
+                  </label>
+                  <select
+                    value={vacationUser}
+                    onChange={(e) => setVacationUser(e.target.value)}
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/25 focus:border-sky-500 cursor-pointer"
+                  >
+                    {allUsers.filter(u => u.isActive).map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
               )}
+
+              {vacationError && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{vacationError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={handleCreateVacation}
+                  className="flex-1 min-h-[38px] py-2 px-4 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                >
+                  {editingVacationId
+                    ? (isBangla ? 'ছুটি আপডেট করুন' : 'Update Vacation')
+                    : (isBangla ? 'ছুটি নিশ্চিত করুন' : 'Set Vacation Mode')}
+                </button>
+                {editingVacationId && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEditVacation}
+                    className="min-h-[38px] py-2 px-3.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    {isBangla ? 'বাতিল' : 'Cancel Edit'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
           {/* ACTIVE VACATIONS LIST */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Registered Vacation Sabbaticals ({visibleVacations.length})
-            </h4>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                {isBangla
+                  ? `নির্ধারিত ছুটি (${visibleVacations.length})`
+                  : `Planned Vacations (${visibleVacations.length})`}
+              </h4>
+            </div>
+
             {visibleVacations.length === 0 ? (
-              <p className="text-xs text-slate-400 italic py-1 text-center">No active vacations planned for this month.</p>
+              <div className="bg-white/70 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-700/80 rounded-xl py-4 px-3 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {isBangla
+                    ? 'এই মাসে এখনো কোনো ছুটি যোগ করা হয়নি।'
+                    : 'No vacations scheduled for this month.'}
+                </p>
+              </div>
             ) : (
-              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+              <div className="max-h-40 overflow-y-auto space-y-2 pr-0.5">
                 {visibleVacations.map(vp => {
                   const targetUser = allUsers.find(x => x.id === vp.userId);
+                  const dayCount = Math.max(
+                    1,
+                    Math.round((new Date(vp.endDate).getTime() - new Date(vp.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1
+                  );
                   return (
-                    <div key={vp.id} className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-3 py-2 rounded-xl text-xs">
-                      <div>
-                        <p className="font-bold text-slate-850 dark:text-white">
-                          {isManagerOrAdmin ? targetUser?.name : 'My Sabbatical'}
+                    <div
+                      key={vp.id}
+                      className="flex justify-between items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 px-3.5 py-2.5 rounded-xl text-xs shadow-2xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 dark:text-white truncate">
+                          {isManagerOrAdmin
+                            ? targetUser?.name
+                            : (isBangla ? 'আমার ছুটি' : 'My Vacation')}
                         </p>
-                        <p className="text-[10px] text-slate-400">
-                          {vp.startDate} to {vp.endDate}
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                          {formatDateDisplay(vp.startDate, settings.language)} – {formatDateDisplay(vp.endDate, settings.language)}
+                          <span className="text-slate-400 dark:text-slate-500"> · {dayCount} {isBangla ? 'দিন' : dayCount === 1 ? 'day' : 'days'}</span>
                         </p>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
+                          type="button"
                           onClick={() => handleEditVacationClick(vp)}
-                          className="text-[10px] font-bold text-sky-600 hover:text-sky-800 px-2 py-1 hover:bg-sky-50 dark:hover:bg-sky-950/20 rounded-lg transition"
+                          className="text-xs font-semibold text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/30 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
                         >
-                          Edit
+                          {isBangla ? 'এডিট' : 'Edit'}
                         </button>
                         <button
+                          type="button"
                           onClick={() => onCancelVacation(vp.id)}
-                          className="text-[10px] font-bold text-rose-600 hover:text-rose-800 px-2 py-1 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition"
+                          className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
                         >
-                          Cancel
+                          {isBangla ? 'বাতিল' : 'Cancel'}
                         </button>
                       </div>
                     </div>
@@ -1090,71 +1205,134 @@ export default function MealSheetTab({
         </div>
 
         {/* PANEL 2: MEAL LOCK CONFIG & OVERRIDES */}
-        <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-150 dark:border-slate-850 p-5 rounded-2xl flex flex-col justify-between shadow-xs">
+        <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 rounded-2xl flex flex-col justify-between gap-5">
           <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
-                <Lock className="text-amber-500" size={18} />
-                Meal Lock & Emergency Override
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Configured Lock Time: <span className="font-bold text-emerald-600 dark:text-emerald-450">{settings.mealLockTime}</span>. Standard members cannot edit tomorrow's meals after this deadline.
-              </p>
-            </div>
-
-            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/85 p-4 rounded-xl space-y-3">
-              <h4 className="text-[10px] font-bold text-slate-550 dark:text-slate-350 uppercase tracking-wider">
-                Live Lock Status
-              </h4>
-              <div className="flex items-center gap-3">
-                <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                  settings.lockOverride 
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
-                    : checkIsLockedForMember(tomorrow).locked
-                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/15'
-                      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
-                }`}>
-                  {settings.lockOverride ? '🔓 OVERRIDDEN' : checkIsLockedForMember(tomorrow).locked ? '🔒 LOCKED' : '🔓 OPEN'}
-                </span>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  {settings.lockOverride 
-                    ? 'Managers have temporarily suspended the lock. Members can edit.' 
-                    : checkIsLockedForMember(tomorrow).locked 
-                      ? 'Daily lock is in force. Only managers can make changes.' 
-                      : 'Standard lockout applies at ' + settings.mealLockTime + ' today.'}
+            {/* Header */}
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/12 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <Lock size={19} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-snug">
+                  {isBangla ? 'দৈনিক মিল লক ও ওভাররাইড' : 'Meal Lock & Override'}
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+                  {isBangla ? (
+                    <>
+                      প্রতিদিন <span className="font-bold text-emerald-600 dark:text-emerald-400">{settings.mealLockTime}</span>-এর পর মেম্বাররা পরের দিনের মিল পরিবর্তন করতে পারবেন না।
+                    </>
+                  ) : (
+                    <>
+                      Daily cutoff is <span className="font-bold text-emerald-600 dark:text-emerald-400">{settings.mealLockTime}</span>. Members cannot change tomorrow&apos;s meals after this time.
+                    </>
+                  )}
                 </p>
               </div>
-
-              {isManagerOrAdmin && (
-                <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3 mt-1.5 flex justify-between items-center">
-                  <div>
-                    <p className="text-xs font-bold text-slate-750 dark:text-slate-200">Bypass Lock for Members</p>
-                    <p className="text-[10px] text-slate-400">Allow standard members to bypass the lock time restriction.</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const updated = { ...settings, lockOverride: !settings.lockOverride };
-                      onUpdateSettings(updated);
-                      onLogAction('Lock Override Trigger', `Meal lock override ${!settings.lockOverride ? 'ENABLED' : 'DISABLED'} by Manager.`);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                      settings.lockOverride 
-                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-sm' 
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                    }`}
-                  >
-                    {settings.lockOverride ? 'Disable Override' : 'Enable Override'}
-                  </button>
-                </div>
-              )}
             </div>
+
+            {/* Live Lock Status Card */}
+            {(() => {
+              const tomorrowLocked = checkIsLockedForMember(tomorrow).locked;
+              const isUnlockedState = settings.lockOverride || !tomorrowLocked;
+
+              return (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-xl space-y-3.5 shadow-2xs">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        settings.lockOverride
+                          ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
+                          : tomorrowLocked
+                            ? 'bg-rose-500/12 text-rose-600 dark:text-rose-400'
+                            : 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
+                      }`}
+                    >
+                      {isUnlockedState ? <Unlock size={17} /> : <Lock size={17} />}
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">
+                        {settings.lockOverride
+                          ? (isBangla ? 'ওভাররাইড চালু (সবাই এডিট করতে পারবে)' : 'Override Active · Open for All')
+                          : tomorrowLocked
+                            ? (isBangla ? 'আজকের জন্য লক করা আছে' : 'Locked for Members')
+                            : (isBangla ? 'এডিটের জন্য খোলা আছে' : 'Open for Edits')}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                        {settings.lockOverride
+                          ? (isBangla
+                              ? 'ম্যানেজার সাময়িকভাবে সময়সীমা তুলে দিয়েছেন। মেম্বাররা এখন মিল পরিবর্তন করতে পারবে।'
+                              : 'Managers temporarily lifted the deadline so members can update tomorrow’s meals.')
+                          : tomorrowLocked
+                            ? (isBangla
+                                ? 'দৈনিক সময়সীমা শেষ হয়েছে। এখন শুধু ম্যানেজার বা অ্যাডমিন পরিবর্তন করতে পারবেন।'
+                                : 'Daily cutoff has passed. Only managers or admins can adjust tomorrow’s meals.')
+                            : (isBangla
+                                ? `আজ রাত/সন্ধ্যা ${settings.mealLockTime} পর্যন্ত মেম্বাররা মিল পরিবর্তন করতে পারবেন।`
+                                : `Members can still update tomorrow’s meals until ${settings.mealLockTime} today.`)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isManagerOrAdmin && (
+                    <div className="border-t border-slate-100 dark:border-slate-800 pt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                          {isBangla ? 'মেম্বারদের জন্য লক ওভাররাইড' : 'Bypass Lock for Members'}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          {isBangla
+                            ? 'সময়সীমা পার হলেও মেম্বারদের এডিট করার অনুমতি দিন।'
+                            : 'Allow members to edit tomorrow’s meals even after cutoff.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = { ...settings, lockOverride: !settings.lockOverride };
+                          onUpdateSettings(updated);
+                          onLogAction('Lock Override Trigger', `Meal lock override ${!settings.lockOverride ? 'ENABLED' : 'DISABLED'} by Manager.`);
+                        }}
+                        className={`min-h-[36px] px-3.5 py-2 rounded-xl text-xs font-bold transition-colors shrink-0 cursor-pointer whitespace-nowrap ${
+                          settings.lockOverride
+                            ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                        }`}
+                      >
+                        {settings.lockOverride
+                          ? (isBangla ? 'ওভাররাইড বন্ধ করুন' : 'Disable Override')
+                          : (isBangla ? 'ওভাররাইড চালু করুন' : 'Enable Override')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
-          <div className="p-3 border border-slate-100 dark:border-slate-800/80 rounded-xl bg-white dark:bg-slate-900 mt-4 text-[11px] text-slate-400 space-y-1.5">
-            <span className="font-bold text-slate-550 dark:text-slate-350 block uppercase tracking-wider">💡 Operational Notes:</span>
-            <p>1. Default meals are automatically marked ON for all members daily.</p>
-            <p>2. Past dates cannot be modified by members under any circumstances.</p>
-            <p>3. Guest meals are included in each member's final monthly total counts.</p>
+          {/* Operational Notes Card */}
+          <div className="p-4 border border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 space-y-2 shadow-2xs">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+              <Info size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{isBangla ? 'গুরুত্বপূর্ণ নিয়মাবলী' : 'Quick Meal Rules'}</span>
+            </div>
+            <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-1.5 list-disc pl-4 leading-relaxed">
+              <li>
+                {isBangla
+                  ? 'প্রতিদিন ডিফল্টভাবে মেম্বারদের মিল চালু (ON) থাকে।'
+                  : 'Default meals stay ON daily unless turned OFF or paused via Vacation.'}
+              </li>
+              <li>
+                {isBangla
+                  ? 'অতীত বা আজকের তারিখের মিল মেম্বাররা পরিবর্তন করতে পারবেন না।'
+                  : 'Past and today’s meals are locked for standard members.'}
+              </li>
+              <li>
+                {isBangla
+                  ? 'অতিথি (Guest) মিল মাসিক মোট মিলের সাথে যোগ হয়।'
+                  : 'Guest meals automatically count toward each member’s monthly total.'}
+              </li>
+            </ul>
           </div>
         </div>
 

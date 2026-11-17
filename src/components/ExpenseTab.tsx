@@ -146,7 +146,7 @@ export default function ExpenseTab({
               <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                 Total Utility & Helper Costs
               </span>
-              <span className="text-3xl font-black text-slate-850 dark:text-white mt-1 block">
+              <span className="text-3xl font-black text-slate-900 dark:text-white mt-1 block">
                 {settings.currency}{totalOtherExpenses.toLocaleString()}
               </span>
             </div>
@@ -275,7 +275,7 @@ export default function ExpenseTab({
 
                     {/* Amount */}
                     <td className="px-5 py-3.5">
-                      <span className="font-bold text-slate-850 dark:text-white text-sm">
+                      <span className="font-bold text-slate-900 dark:text-white text-sm">
                         {settings.currency}{expense.amount.toLocaleString()}
                       </span>
                     </td>
@@ -283,7 +283,7 @@ export default function ExpenseTab({
                     {/* Date */}
                     <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400">
                       <span className="flex items-center gap-1.5">
-                        <Calendar size={13} className="text-slate-450" />
+                        <Calendar size={13} className="text-slate-400" />
                         {expense.date}
                       </span>
                     </td>
@@ -338,7 +338,7 @@ export default function ExpenseTab({
                       animate={{ opacity: 1, y: 0 }}
                       className="max-w-xs mx-auto flex flex-col items-center"
                     >
-                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-650">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-600">
                         <CreditCard size={28} />
                       </div>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
@@ -363,7 +363,7 @@ export default function ExpenseTab({
             
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-850 dark:text-white">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                   Record Mess Overhead Cost
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">

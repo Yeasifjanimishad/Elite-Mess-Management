@@ -339,7 +339,7 @@ export default function SettingsTab({
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-4 mb-5">
-              <h3 className="font-bold text-slate-850 dark:text-white flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Settings size={20} className="text-emerald-600 dark:text-emerald-400" />
                 {isBangla ? 'সাধারণ সেটিংস কনফিগারেশন' : 'General Configuration Parameters'}
               </h3>
@@ -364,7 +364,7 @@ export default function SettingsTab({
                     disabled={!isAdmin}
                     value={formData.systemName}
                     onChange={(e) => handleChange('systemName', e.target.value)}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-850 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -379,7 +379,7 @@ export default function SettingsTab({
                     disabled={!isAdmin}
                     value={formData.mealLockTime}
                     onChange={(e) => handleChange('mealLockTime', e.target.value)}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-850 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -394,7 +394,7 @@ export default function SettingsTab({
                     disabled={!isAdmin}
                     value={formData.currency}
                     onChange={(e) => handleChange('currency', e.target.value)}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-850 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-bold disabled:opacity-75 disabled:cursor-not-allowed"
                   >
                     <option value="৳">৳ (BDT Taka)</option>
                     <option value="$">$ (USD Dollar)</option>
@@ -414,7 +414,7 @@ export default function SettingsTab({
                     disabled={!isAdmin}
                     value={formData.guestMealLimit}
                     onChange={(e) => handleChange('guestMealLimit', Math.max(1, Number(e.target.value)))}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-850 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -426,7 +426,7 @@ export default function SettingsTab({
                     disabled={!isAdmin}
                     value={formData.language}
                     onChange={(e) => handleChange('language', e.target.value)}
-                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-850 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="w-full text-xs border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold disabled:opacity-75 disabled:cursor-not-allowed"
                   >
                     <option value="English">English (US)</option>
                     <option value="Bangla">Bangla (বাঙালি)</option>
@@ -445,7 +445,7 @@ export default function SettingsTab({
                     className="mt-0.5 w-4.5 h-4.5 rounded text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer disabled:cursor-not-allowed"
                   />
                   <div>
-                    <span className="text-xs font-bold text-slate-750 dark:text-slate-200 block">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
                       {isBangla ? 'ডিফল্ট মিল রিজার্ভেশন চালু রাখুন (সব সময় সক্রিয়)' : 'Default Meal Reservation Status (AUTO-ON)'}
                     </span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">
@@ -544,7 +544,7 @@ export default function SettingsTab({
           {/* MANAGER PERMISSIONS CONTROL BOARD */}
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-4 mb-5">
-              <h3 className="font-bold text-slate-850 dark:text-white flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Sliders size={20} className="text-indigo-600 dark:text-indigo-400" />
                 {isBangla ? 'ম্যানেজার অ্যাক্সেস পারমিশন' : 'Manager Permissions Panel'}
               </h3>
@@ -577,7 +577,7 @@ export default function SettingsTab({
                   disabled={!isAdmin}
                   onClick={() => handleChange('mgrCanApproveBazaar', !formData.mgrCanApproveBazaar)}
                   className={`w-11 h-6 rounded-full transition relative p-0.5 cursor-pointer disabled:cursor-not-allowed ${
-                    formData.mgrCanApproveBazaar ? 'bg-emerald-500' : 'bg-slate-250 dark:bg-slate-750'
+                    formData.mgrCanApproveBazaar ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'
                   }`}
                 >
                   <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition duration-200 ${
@@ -606,7 +606,7 @@ export default function SettingsTab({
                   disabled={!isAdmin}
                   onClick={() => handleChange('mgrCanAddDeposit', !formData.mgrCanAddDeposit)}
                   className={`w-11 h-6 rounded-full transition relative p-0.5 cursor-pointer disabled:cursor-not-allowed ${
-                    formData.mgrCanAddDeposit ? 'bg-emerald-500' : 'bg-slate-250 dark:bg-slate-750'
+                    formData.mgrCanAddDeposit ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'
                   }`}
                 >
                   <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition duration-200 ${
@@ -635,7 +635,7 @@ export default function SettingsTab({
                   disabled={!isAdmin}
                   onClick={() => handleChange('mgrCanAddExpense', !formData.mgrCanAddExpense)}
                   className={`w-11 h-6 rounded-full transition relative p-0.5 cursor-pointer disabled:cursor-not-allowed ${
-                    formData.mgrCanAddExpense ? 'bg-emerald-500' : 'bg-slate-250 dark:bg-slate-750'
+                    formData.mgrCanAddExpense ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'
                   }`}
                 >
                   <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition duration-200 ${
@@ -664,7 +664,7 @@ export default function SettingsTab({
                   disabled={!isAdmin}
                   onClick={() => handleChange('mgrCanManageUsers', !formData.mgrCanManageUsers)}
                   className={`w-11 h-6 rounded-full transition relative p-0.5 cursor-pointer disabled:cursor-not-allowed ${
-                    formData.mgrCanManageUsers ? 'bg-emerald-500' : 'bg-slate-250 dark:bg-slate-750'
+                    formData.mgrCanManageUsers ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'
                   }`}
                 >
                   <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition duration-200 ${
@@ -693,7 +693,7 @@ export default function SettingsTab({
                   disabled={!isAdmin}
                   onClick={() => handleChange('mgrCanPublishNotice', !formData.mgrCanPublishNotice)}
                   className={`w-11 h-6 rounded-full transition relative p-0.5 cursor-pointer disabled:cursor-not-allowed ${
-                    formData.mgrCanPublishNotice ? 'bg-emerald-500' : 'bg-slate-250 dark:bg-slate-750'
+                    formData.mgrCanPublishNotice ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'
                   }`}
                 >
                   <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition duration-200 ${
@@ -741,7 +741,7 @@ export default function SettingsTab({
               <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 {isBangla ? 'বর্তমান সক্রিয় মাস:' : 'Current Cycle:'}
               </span>
-              <span className="text-sm font-black text-slate-850 dark:text-white">
+              <span className="text-sm font-black text-slate-900 dark:text-white">
                 {activeMonthLabel}
               </span>
             </div>
@@ -757,7 +757,7 @@ export default function SettingsTab({
                       type="month"
                       value={selectedTargetMonth}
                       onChange={(e) => setSelectedTargetMonth(e.target.value)}
-                      className="flex-1 text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-850 dark:text-white font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="flex-1 text-xs border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                     <button
                       type="button"
@@ -829,7 +829,7 @@ export default function SettingsTab({
                   className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-md cursor-pointer ${
                     settings.isMonthClosed
                       ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-rose-500/15'
-                      : 'bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-850'
+                      : 'bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800'
                   }`}
                 >
                   {settings.isMonthClosed ? (
@@ -843,7 +843,7 @@ export default function SettingsTab({
                   )}
                 </button>
               ) : (
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-150 dark:border-slate-800 text-center">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
                   <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
                     {isBangla ? 'মেস মাসের স্ট্যাটাস' : 'Ecosystem Locker Status'}
                   </span>
@@ -914,15 +914,15 @@ export default function SettingsTab({
             <div className="space-y-1 text-[11px] font-mono text-slate-500 dark:text-slate-400">
               <div className="flex justify-between">
                 <span>Active Core:</span>
-                <span className="text-slate-750 dark:text-slate-300 font-bold">Node-v18-LTS</span>
+                <span className="text-slate-700 dark:text-slate-300 font-bold">Node-v18-LTS</span>
               </div>
               <div className="flex justify-between">
                 <span>Memory Store:</span>
-                <span className="text-slate-750 dark:text-slate-300 font-bold">LocalStorage Cache</span>
+                <span className="text-slate-700 dark:text-slate-300 font-bold">LocalStorage Cache</span>
               </div>
               <div className="flex justify-between">
                 <span>Ecosystem ID:</span>
-                <span className="text-slate-750 dark:text-slate-300 font-bold text-right truncate max-w-[120px]" title="d0950ec3-39cf-4ad6-bb40-24576efde5d7">
+                <span className="text-slate-700 dark:text-slate-300 font-bold text-right truncate max-w-[120px]" title="d0950ec3-39cf-4ad6-bb40-24576efde5d7">
                   d0950ec3
                 </span>
               </div>

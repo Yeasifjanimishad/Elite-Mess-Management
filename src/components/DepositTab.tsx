@@ -382,7 +382,7 @@ export default function DepositTab({
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
               {isBangla ? 'মোট সংগৃহীত ডিপোজিট' : 'Total Deposits pool'}
             </span>
-            <span className="text-xl font-black text-slate-850 dark:text-white mt-1 block">
+            <span className="text-xl font-black text-slate-900 dark:text-white mt-1 block">
               {settings.currency}{totalApprovedDeposits.toLocaleString()}
             </span>
           </div>
@@ -430,7 +430,7 @@ export default function DepositTab({
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
               {isBangla ? 'মোট বকেয়া খতিয়ান' : 'Total Outstanding Dues'}
             </span>
-            <span className="text-xl font-black text-rose-600 dark:text-rose-455 mt-1 block">
+            <span className="text-xl font-black text-rose-600 dark:text-rose-400 mt-1 block">
               {settings.currency}{totalPendingDuesSum.toLocaleString()}
             </span>
           </div>
@@ -443,7 +443,7 @@ export default function DepositTab({
       {/* PENDING APPROVAL QUEUE (ONLY FOR MANAGER) */}
       {/* ------------------------------------------------------------------- */}
       {isManagerOrAdmin && deposits.some(d => d.status === 'Pending') && (
-        <div className="bg-amber-550/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2">
             <Clock className="text-amber-600 dark:text-amber-400" size={18} />
             <h3 className="font-bold text-slate-900 dark:text-white text-sm">
@@ -484,7 +484,7 @@ export default function DepositTab({
                       </div>
                     )}
                     {deposit.note && (
-                      <div className="border-t border-slate-50 dark:border-slate-800 pt-1.5 mt-1.5 italic text-slate-450">
+                      <div className="border-t border-slate-50 dark:border-slate-800 pt-1.5 mt-1.5 italic text-slate-400">
                         "{deposit.note}"
                       </div>
                     )}
@@ -516,7 +516,7 @@ export default function DepositTab({
       {/* ------------------------------------------------------------------- */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-xs">
         <div>
-          <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <AlertCircle className="text-rose-500" size={16} />
             {isBangla ? 'সদস্যদের বকেয়া ও আমানতের বিবরণী (লাইভ)' : 'Live Member Balance & Outstanding Dues'}
           </h3>
@@ -541,7 +541,7 @@ export default function DepositTab({
             </thead>
             <tbody>
               {memberBalancesList.map((m) => (
-                <tr key={m.id} className="border-b border-slate-50 dark:border-slate-800 text-xs hover:bg-slate-50/40 dark:hover:bg-slate-850/10 transition">
+                <tr key={m.id} className="border-b border-slate-50 dark:border-slate-800 text-xs hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition">
                   {/* User profile */}
                   <td className="px-5 py-3 flex items-center gap-2.5">
                     <img src={m.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-6.5 h-6.5 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
@@ -563,7 +563,7 @@ export default function DepositTab({
                   </td>
 
                   {/* Bill */}
-                  <td className="px-5 py-3 text-center font-semibold text-slate-550 dark:text-slate-400">
+                  <td className="px-5 py-3 text-center font-semibold text-slate-500 dark:text-slate-400">
                     {settings.currency}{m.bill.toFixed(2)}
                   </td>
 
@@ -599,7 +599,7 @@ export default function DepositTab({
       {isManagerOrAdmin && (
         <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-xs">
           <div>
-            <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Plus className="text-indigo-500" size={16} />
               {isBangla ? 'সদস্যদের ক্যারী ফরওয়ার্ড ব্যালেন্স পরিবর্তন' : 'Manage Carry Forward Balances'}
             </h3>
@@ -782,12 +782,12 @@ export default function DepositTab({
                 return (
                   <tr 
                     key={deposit.id} 
-                    className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-750 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition"
+                    className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition"
                   >
                     {/* User */}
                     <td className="px-5 py-3.5 flex items-center gap-2.5">
                       <img src={u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-6.5 h-6.5 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
-                      <span className="font-semibold text-slate-850 dark:text-white">{u.name}</span>
+                      <span className="font-semibold text-slate-900 dark:text-white">{u.name}</span>
                     </td>
 
                     {/* Amount */}
@@ -874,7 +874,7 @@ export default function DepositTab({
                       animate={{ opacity: 1, y: 0 }}
                       className="max-w-xs mx-auto flex flex-col items-center"
                     >
-                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-650">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-600">
                         <Coins size={28} />
                       </div>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
@@ -901,7 +901,7 @@ export default function DepositTab({
             
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-850 dark:text-white">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                   {isManagerOrAdmin 
                     ? (isBangla ? 'আমানত রেকর্ড করুন' : 'Record Member Deposit')
                     : (isBangla ? 'আমানতের দাবি জমা দিন' : 'Request Deposit Credit')}
@@ -923,7 +923,7 @@ export default function DepositTab({
             <form onSubmit={handleSubmit} className="space-y-4">
               
               {duplicateWarning && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/15 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2 animate-pulse">
+                <div className="p-3 bg-rose-500/10 border border-rose-500/15 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2">
                   <AlertCircle size={16} className="shrink-0 mt-0.5" />
                   <span>{duplicateWarning}</span>
                 </div>

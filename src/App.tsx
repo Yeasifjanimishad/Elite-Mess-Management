@@ -2256,6 +2256,7 @@ export default function App() {
               }
             }}
             onUpdateMeals={handleUpdateMeals}
+            onNavigateTab={(tab) => setCurrentTab(tab)}
           />
         );
       case 'MealSheet':
@@ -2437,7 +2438,7 @@ export default function App() {
       {/* MOBILE DRAWER SIDEBAR */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden animate-fade-in bg-slate-900/40 backdrop-blur-xs">
-          <div className="relative w-64 max-w-xs bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-100 dark:border-slate-850">
+          <div className="relative w-64 max-w-xs bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-100 dark:border-slate-800">
             <button 
               onClick={() => setMobileMenuOpen(false)}
               className="absolute right-4 top-4 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-500 transition hover:text-slate-800"
@@ -2498,7 +2499,7 @@ export default function App() {
               type="button"
               onClick={() => setCurrentTab(currentPersona === 'Admin' ? 'Settings' : 'Reports')}
               title={currentPersona === 'Admin' ? 'Manage active month in Settings' : 'Active billing month'}
-              className="bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/70 dark:hover:bg-slate-800 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-750 transition cursor-pointer"
+              className="bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/70 dark:hover:bg-slate-800 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 transition cursor-pointer"
             >
               <Calendar size={13} className="text-emerald-500" />
               <span>{formatMonthLabel(activeMonth, settings.language)}</span>
@@ -2588,7 +2589,7 @@ export default function App() {
             {/* Persona Display avatar */}
             <div className="flex items-center gap-2.5">
               <div className="text-right hidden sm:block">
-                <span className="font-bold text-slate-850 dark:text-white text-xs block">{currentUser.name}</span>
+                <span className="font-bold text-slate-900 dark:text-white text-xs block">{currentUser.name}</span>
                 <span className="text-[10px] text-slate-400 block font-semibold uppercase tracking-wider">{currentPersona} Mode</span>
               </div>
               <img 
@@ -2604,11 +2605,11 @@ export default function App() {
         </header>
 
         {/* PAGE SCREEN STAGE */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full max-w-full mx-auto overflow-y-auto space-y-6">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full max-w-[1440px] mx-auto overflow-y-auto space-y-6">
           <React.Suspense fallback={
-            <div className="flex flex-col items-center justify-center py-24 space-y-4">
-              <div className="w-10 h-10 border-3 border-slate-200 border-t-emerald-600 rounded-full animate-spin"></div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading component...</p>
+            <div className="flex flex-col items-center justify-center py-24 space-y-3">
+              <div className="w-9 h-9 border-3 border-slate-200 dark:border-slate-800 border-t-emerald-600 rounded-full animate-spin" />
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Loading view...</p>
             </div>
           }>
             {renderTabContent()}

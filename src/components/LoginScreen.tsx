@@ -740,7 +740,7 @@ export default function LoginScreen({
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 border-slate-350 rounded-sm focus:ring-emerald-500"
+                  className="w-4 h-4 text-emerald-600 border-slate-300 rounded-sm focus:ring-emerald-500"
                 />
                 <span className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400">
                   {t.rememberMe}

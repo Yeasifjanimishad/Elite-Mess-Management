@@ -534,11 +534,11 @@ export default function ReportsTab({
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
         <div>
-          <h2 className="text-xl font-bold text-slate-850 dark:text-white flex items-center gap-2">
-            <FilePieChart size={22} className="text-emerald-600 dark:text-emerald-400 animate-pulse" />
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <FilePieChart size={22} className="text-emerald-600 dark:text-emerald-400" />
             {isBangla ? 'মেস রিপোর্ট ও হিসাব ক্লোজিং' : 'Reports & Fiscal Statement'}
           </h2>
-          <p className="text-xs text-slate-450 dark:text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-400 dark:text-slate-400 mt-0.5">
             {isBangla 
               ? 'ডাইনিং মিল রেট, বিল বণ্টন, বাজার ও আমানতের খতিয়ান এবং চূড়ান্ত মাস শেষ হিসাব ক্লোজিং।' 
               : 'Dining meal rate distributions, member bills, bazaar audit, and final month closing.'}
@@ -626,7 +626,7 @@ export default function ReportsTab({
               className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap transition cursor-pointer ${
                 isActive 
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/10' 
-                  : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
               }`}
             >
               <Icon size={14} />
@@ -643,10 +643,10 @@ export default function ReportsTab({
             <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
               {isBangla ? 'মোট বাজার ও ওভারহেড খরচ' : 'Total Mess Expenses'}
             </span>
-            <h3 className="text-lg font-black text-slate-850 dark:text-white mt-1">
+            <h3 className="text-lg font-black text-slate-900 dark:text-white mt-1">
               {currency}{totalExpenses.toLocaleString()}
             </h3>
-            <div className="flex gap-2 text-[10px] text-slate-450 mt-1">
+            <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
               <span>Bazaar: {currency}{totalBazaarCost}</span>
               <span>Overhead: {currency}{totalOtherExpense}</span>
             </div>
@@ -656,10 +656,10 @@ export default function ReportsTab({
             <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
               {isBangla ? 'মোট মিল সংখ্যা' : 'Combined Meal Count'}
             </span>
-            <h3 className="text-lg font-black text-slate-850 dark:text-white mt-1">
+            <h3 className="text-lg font-black text-slate-900 dark:text-white mt-1">
               {totalMealsInMonth.toLocaleString()} <span className="text-xs font-bold text-slate-400">Meals</span>
             </h3>
-            <p className="text-[9px] text-slate-450 mt-1">{isBangla ? 'অতিথি মিল সহ মোট হিসাব' : 'Including all user and guest meals'}</p>
+            <p className="text-[9px] text-slate-400 mt-1">{isBangla ? 'অতিথি মিল সহ মোট হিসাব' : 'Including all user and guest meals'}</p>
           </div>
 
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm relative">
@@ -669,7 +669,7 @@ export default function ReportsTab({
             <h3 className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1">
               {currency}{currentMealRate.toFixed(4)}
             </h3>
-            <p className="text-[9px] text-slate-450 mt-1">{isBangla ? 'মোট খরচ ÷ মোট মিল সংখ্যা' : 'Live: Total Costs / Total Meals'}</p>
+            <p className="text-[9px] text-slate-400 mt-1">{isBangla ? 'মোট খরচ ÷ মোট মিল সংখ্যা' : 'Live: Total Costs / Total Meals'}</p>
           </div>
 
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
@@ -679,7 +679,7 @@ export default function ReportsTab({
             <h3 className="text-lg font-black text-indigo-600 dark:text-indigo-400 mt-1">
               {currency}{monthDeposits.filter(d => d.status === 'Approved').reduce((s,d) => s+d.amount,0).toLocaleString()}
             </h3>
-            <p className="text-[9px] text-slate-450 mt-1">{isBangla ? `${selectedMonthLabel} এর অনুমোদিত আমানত` : `Approved funds (${selectedMonthLabel})`}</p>
+            <p className="text-[9px] text-slate-400 mt-1">{isBangla ? `${selectedMonthLabel} এর অনুমোদিত আমানত` : `Approved funds (${selectedMonthLabel})`}</p>
           </div>
         </div>
       )}
@@ -718,7 +718,7 @@ export default function ReportsTab({
           )}
 
           {['Daily', 'Weekly', 'Bazaar', 'Deposit', 'GuestMeal'].includes(activeTab) && (
-            <div className="text-xs font-bold text-slate-650 dark:text-slate-400">
+            <div className="text-xs font-bold text-slate-600 dark:text-slate-400">
               {activeTab === 'Daily' && (isBangla ? `${selectedMonthLabel} মাসের ${daysInMonth} দিনের তালিকা` : `Daily schedule list for ${selectedMonthLabel} (Days 1 - ${daysInMonth})`)}
               {activeTab === 'Weekly' && (isBangla ? `${weeklyReports.length}টি ধাপে বিভক্ত সাপ্তাহিক হিসাব` : `Weekly analysis grouped by ${weeklyReports.length} weeks`)}
               {activeTab === 'Bazaar' && (isBangla ? 'অনুমোদিত বাজার খরচসমূহের অডিট খতিয়ান' : `Audit trail for approved bazaar entries (${selectedMonthLabel})`)}
@@ -735,7 +735,7 @@ export default function ReportsTab({
             className="w-full sm:w-auto px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 text-xs font-bold transition cursor-pointer"
             title="Export Excel/CSV"
           >
-            <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-450" />
+            <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
             <span>{isBangla ? 'এক্সেল ডাউনলোড' : 'Export Excel'}</span>
           </button>
 
@@ -801,7 +801,7 @@ export default function ReportsTab({
                       key={row.userId}
                       className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition"
                     >
-                      <td className="px-5 py-3.5 font-bold text-slate-850 dark:text-white flex items-center gap-2">
+                      <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-2">
                         {Boolean(row.avatarUrl) && <img src={row.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-5 h-5 rounded-full object-cover shrink-0 print:hidden" alt="" referrerPolicy="no-referrer" />}
                         <div>
                           <span>{row.name}</span>
@@ -916,18 +916,18 @@ export default function ReportsTab({
                 className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-sm relative overflow-hidden"
               >
                 <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500" />
-                <h4 className="font-extrabold text-sm text-slate-850 dark:text-white">{w.name}</h4>
+                <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">{w.name}</h4>
                 <div className="mt-4 space-y-2.5 text-xs">
                   <div className="flex justify-between border-b border-slate-50 dark:border-slate-800/50 pb-1.5">
-                    <span className="text-slate-450">{isBangla ? 'মোট মিল সংখ্যা:' : 'Total Meals:'}</span>
+                    <span className="text-slate-400">{isBangla ? 'মোট মিল সংখ্যা:' : 'Total Meals:'}</span>
                     <span className="font-bold text-slate-800 dark:text-white">{w.mealsCount} Meals</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-50 dark:border-slate-800/50 pb-1.5">
-                    <span className="text-slate-450">{isBangla ? 'বাজার খরচ:' : 'Bazaar approved:'}</span>
+                    <span className="text-slate-400">{isBangla ? 'বাজার খরচ:' : 'Bazaar approved:'}</span>
                     <span className="font-bold text-amber-600">{currency}{w.bazaarCost.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-50 dark:border-slate-800/50 pb-1.5">
-                    <span className="text-slate-450">{isBangla ? 'ওভারহেড বিলসমূহ:' : 'Overhead Expenses:'}</span>
+                    <span className="text-slate-400">{isBangla ? 'ওভারহেড বিলসমূহ:' : 'Overhead Expenses:'}</span>
                     <span className="font-bold text-rose-500">{currency}{w.overheadCost.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-50 dark:border-slate-800/50 pb-1.5 font-bold text-slate-800 dark:text-slate-200">
@@ -959,7 +959,7 @@ export default function ReportsTab({
                   <img src={selectedUserRow.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-14 h-14 rounded-full object-cover shrink-0 border border-slate-200" alt="" referrerPolicy="no-referrer" />
                 )}
                 <div className="min-w-0">
-                  <h4 className="font-black text-slate-850 dark:text-white truncate">{selectedUserRow.name}</h4>
+                  <h4 className="font-black text-slate-900 dark:text-white truncate">{selectedUserRow.name}</h4>
                   <p className="text-xs text-slate-400 truncate">{selectedUserRow.email}</p>
                   <p className="text-[10px] text-slate-500 font-mono mt-1">{selectedUserRow.phone}</p>
                   <span className={`inline-block text-[8px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded mt-2 ${
@@ -978,18 +978,18 @@ export default function ReportsTab({
                   </span>
                   <div className="flex gap-4 mt-2">
                     <div>
-                      <span className="text-[10px] text-slate-450 block">{isBangla ? 'ক্যারী ফরওয়ার্ড:' : 'Carry Fwd:'}</span>
+                      <span className="text-[10px] text-slate-400 block">{isBangla ? 'ক্যারী ফরওয়ার্ড:' : 'Carry Fwd:'}</span>
                       <span className={`font-bold text-xs ${selectedUserRow.carryForward >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                         {selectedUserRow.carryForward >= 0 ? '+' : ''}{currency}{selectedUserRow.carryForward}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-450 block">{isBangla ? 'চলতি আমানত:' : 'Deposited:'}</span>
+                      <span className="text-[10px] text-slate-400 block">{isBangla ? 'চলতি আমানত:' : 'Deposited:'}</span>
                       <span className="font-bold text-xs text-indigo-600 dark:text-indigo-400">{currency}{selectedUserRow.deposits}</span>
                     </div>
                   </div>
                 </div>
-                <div className="border-t border-slate-50 dark:border-slate-800 pt-2.5 mt-2.5 flex justify-between text-xs font-bold text-slate-850 dark:text-white">
+                <div className="border-t border-slate-50 dark:border-slate-800 pt-2.5 mt-2.5 flex justify-between text-xs font-bold text-slate-900 dark:text-white">
                   <span>{isBangla ? 'সর্বমোট প্রাপ্ত ফান্ড:' : 'Total Funds Available:'}</span>
                   <span>{currency}{(selectedUserRow.carryForward + selectedUserRow.deposits).toLocaleString()}</span>
                 </div>
@@ -1004,17 +1004,17 @@ export default function ReportsTab({
                   </span>
                   <div className="flex gap-4 mt-2">
                     <div>
-                      <span className="text-[10px] text-slate-450 block">{isBangla ? 'মিল সংখ্যা:' : 'Meals Count:'}</span>
+                      <span className="text-[10px] text-slate-400 block">{isBangla ? 'মিল সংখ্যা:' : 'Meals Count:'}</span>
                       <span className="font-bold text-xs text-slate-800 dark:text-white">{selectedUserRow.totalMeals} Meals</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-450 block">{isBangla ? 'মিল বিল:' : 'Bill Owed:'}</span>
-                      <span className="font-bold text-xs text-slate-850 dark:text-slate-200">{currency}{selectedUserRow.billAmount.toFixed(2)}</span>
+                      <span className="text-[10px] text-slate-400 block">{isBangla ? 'মিল বিল:' : 'Bill Owed:'}</span>
+                      <span className="font-bold text-xs text-slate-900 dark:text-slate-200">{currency}{selectedUserRow.billAmount.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
                 <div className="border-t border-slate-50 dark:border-slate-800 pt-2.5 mt-2.5 flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-450">{isBangla ? 'চূড়ান্ত নিট ব্যালেন্স:' : 'Net Ledger Balance:'}</span>
+                  <span className="text-xs font-bold text-slate-400">{isBangla ? 'চূড়ান্ত নিট ব্যালেন্স:' : 'Net Ledger Balance:'}</span>
                   <span className={`font-black text-sm ${selectedUserRow.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
                     {selectedUserRow.balance >= 0 ? '+' : '-'}{currency}{Math.abs(selectedUserRow.balance).toFixed(2)}
                   </span>
@@ -1027,7 +1027,7 @@ export default function ReportsTab({
             <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
               <div className="p-4 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center">
                 <h4 className="font-bold text-slate-800 dark:text-white text-xs">{isBangla ? 'চলতি মাসের মিল গ্রহণের দিনপঞ্জি' : 'Calendar logs & Est Daily Cost'}</h4>
-                <span className="text-[10px] text-slate-450 font-medium">Meal Rate: {currency}{currentMealRate.toFixed(4)}</span>
+                <span className="text-[10px] text-slate-400 font-medium">Meal Rate: {currency}{currentMealRate.toFixed(4)}</span>
               </div>
               
               <div className="overflow-x-auto">
@@ -1140,7 +1140,7 @@ export default function ReportsTab({
                         </div>
                       </td>
 
-                      <td className="px-5 py-3 text-slate-450 italic text-[11px]">
+                      <td className="px-5 py-3 text-slate-400 italic text-[11px]">
                         {b.approvedBy ? (allUsers.find(x => x.id === b.approvedBy)?.name || 'Manager') : 'System Admin'}
                       </td>
                     </tr>
@@ -1148,7 +1148,7 @@ export default function ReportsTab({
 
                   {monthBazaarEntries.filter(b => b.status === 'Approved').length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-xs text-slate-450 font-medium">
+                      <td colSpan={6} className="py-12 text-center text-xs text-slate-400 font-medium">
                         {isBangla ? 'কোনো অনুমোদিত বাজার রেকর্ড নেই।' : 'No approved bazaar records found.'}
                       </td>
                     </tr>
@@ -1187,7 +1187,7 @@ export default function ReportsTab({
                     return (
                       <tr key={d.id} className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300">
                         <td className="px-5 py-3 font-semibold">{d.date}</td>
-                        <td className="px-5 py-3 font-bold text-slate-850 dark:text-white">{u?.name || 'Unknown'}</td>
+                        <td className="px-5 py-3 font-bold text-slate-900 dark:text-white">{u?.name || 'Unknown'}</td>
                         <td className="px-5 py-3 text-center font-bold text-indigo-600">{currency}{d.amount.toLocaleString()}</td>
                         <td className="px-5 py-3">
                           <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-slate-100 dark:bg-slate-800 font-bold">{d.method}</span>
@@ -1200,7 +1200,7 @@ export default function ReportsTab({
 
                   {monthDeposits.filter(d => d.status === 'Approved').length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-xs text-slate-450 font-medium">
+                      <td colSpan={6} className="py-12 text-center text-xs text-slate-400 font-medium">
                         {isBangla ? 'কোনো অনুমোদিত আমানত পাওয়া যায়নি।' : 'No verified deposits found.'}
                       </td>
                     </tr>
@@ -1218,7 +1218,7 @@ export default function ReportsTab({
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
             <div className="p-4 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center">
               <h4 className="font-bold text-slate-800 dark:text-white text-xs">{isBangla ? 'মেসের সদস্যদের অতিথি মিল ও বিল বণ্টন বিবরণী' : 'Guest meals audit and estimates'}</h4>
-              <span className="text-[10px] text-slate-450 font-medium">Meal Rate: {currency}{currentMealRate.toFixed(4)}</span>
+              <span className="text-[10px] text-slate-400 font-medium">Meal Rate: {currency}{currentMealRate.toFixed(4)}</span>
             </div>
 
             <div className="overflow-x-auto">
@@ -1244,12 +1244,12 @@ export default function ReportsTab({
                           !hasGuests ? 'opacity-40' : ''
                         }`}
                       >
-                        <td className="px-5 py-3.5 font-bold text-slate-850 dark:text-white">{row.name}</td>
+                        <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">{row.name}</td>
                         <td className="px-5 py-3.5 text-center text-slate-500">{row.guestBreakfast}</td>
                         <td className="px-5 py-3.5 text-center text-slate-500">{row.guestLunch}</td>
                         <td className="px-5 py-3.5 text-center text-slate-500">{row.guestDinner}</td>
                         <td className="px-5 py-3.5 text-center font-bold text-indigo-600">{row.guestMeals} Meals</td>
-                        <td className="px-5 py-3.5 text-center font-black text-slate-850 dark:text-slate-200">
+                        <td className="px-5 py-3.5 text-center font-black text-slate-900 dark:text-slate-200">
                           {guestBill > 0 ? `${currency}${guestBill.toFixed(2)}` : '-'}
                         </td>
                       </tr>
@@ -1298,10 +1298,10 @@ export default function ReportsTab({
                     <Lock size={20} className="animate-bounce" />
                   </div>
                   <div>
-                    <h3 className="text-base font-black text-slate-850 dark:text-white">
+                    <h3 className="text-base font-black text-slate-900 dark:text-white">
                       {isBangla ? `চূড়ান্ত মাস সমাপ্তি (${activeMonthLabel})` : `Close & Finalize ${activeMonthLabel}`}
                     </h3>
-                    <p className="text-xs text-slate-450">
+                    <p className="text-xs text-slate-400">
                       {isBangla ? 'চলতি চক্রের হিসাব ক্লোজিং এবং উদ্বৃত্ত স্থানান্তর গেটওয়ে।' : 'Carry forward net balances and lock or start next month.'}
                     </p>
                   </div>
@@ -1310,12 +1310,12 @@ export default function ReportsTab({
                 {/* Audit summary */}
                 <div className="bg-slate-50 dark:bg-slate-800/40 p-4 border border-slate-100 dark:border-slate-800 rounded-2xl space-y-2.5 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-450">{isBangla ? 'চূড়ান্ত মিল সংখ্যা:' : 'Total Meals Eaten:'}</span>
+                    <span className="text-slate-400">{isBangla ? 'চূড়ান্ত মিল সংখ্যা:' : 'Total Meals Eaten:'}</span>
                     <span className="font-bold text-slate-800 dark:text-white">{totalMealsInMonth}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-450">{isBangla ? 'সর্বমোট বাজার ও ডাইনিং খরচ:' : 'Total Dining Expenses:'}</span>
-                    <span className="font-bold text-slate-850 dark:text-white">{currency}{totalExpenses.toLocaleString()}</span>
+                    <span className="text-slate-400">{isBangla ? 'সর্বমোট বাজার ও ডাইনিং খরচ:' : 'Total Dining Expenses:'}</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{currency}{totalExpenses.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2 font-bold text-emerald-600">
                     <span>{isBangla ? 'চূড়ান্ত মিল রেট:' : 'Final Meal Rate:'}</span>
@@ -1353,7 +1353,7 @@ export default function ReportsTab({
                 <div className="flex flex-col sm:flex-row gap-2.5 pt-2 border-t border-slate-50 dark:border-slate-800">
                   <button
                     onClick={() => setShowCloseModal(false)}
-                    className="py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-350 font-bold text-xs rounded-xl transition cursor-pointer"
+                    className="py-2.5 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
                   >
                     {isBangla ? 'বাতিল' : 'Cancel'}
                   </button>

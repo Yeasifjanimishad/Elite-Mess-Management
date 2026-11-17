@@ -375,7 +375,7 @@ export default function BazaarTab({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleTriggerReminderClick}
-                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 border border-amber-650 hover:border-amber-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer transition flex items-center gap-1 shadow-sm"
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 border border-amber-600 hover:border-amber-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg cursor-pointer transition flex items-center gap-1 shadow-sm"
                     title="Send bazaar schedule alert notice"
                   >
                     Send Reminder
@@ -441,8 +441,8 @@ export default function BazaarTab({
                     onClick={() => handleDutyToggle(user.id)}
                     className={`flex items-center gap-2 p-2 rounded-xl border-2 text-left cursor-pointer transition-all text-xs ${
                       isSelected 
-                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 text-emerald-850 dark:text-emerald-400' 
-                        : 'bg-white dark:bg-slate-850 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 text-emerald-800 dark:text-emerald-400' 
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
                     }`}
                   >
                     <img src={user.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-5 h-5 rounded-full object-cover shrink-0" alt="" referrerPolicy="no-referrer" />
@@ -550,7 +550,7 @@ export default function BazaarTab({
             placeholder={t.searchItemPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-850 border border-slate-250 dark:border-slate-700/60 rounded-xl text-xs font-semibold text-slate-850 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500"
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500"
           />
         </div>
 
@@ -560,7 +560,7 @@ export default function BazaarTab({
           <select
             value={statusFilter}
             onChange={(e: any) => setStatusFilter(e.target.value)}
-            className="w-full md:w-40 px-3 py-2 bg-slate-50 dark:bg-slate-850 border border-slate-250 dark:border-slate-700/60 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500 cursor-pointer"
+            className="w-full md:w-40 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500 cursor-pointer"
           >
             <option value="All">{t.allStatus}</option>
             <option value="Pending">{t.pendingStatus}</option>
@@ -575,7 +575,7 @@ export default function BazaarTab({
           <select
             value={monthFilter}
             onChange={(e) => setMonthFilter(e.target.value)}
-            className="w-full md:w-44 px-3 py-2 bg-slate-50 dark:bg-slate-850 border border-slate-250 dark:border-slate-700/60 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500 cursor-pointer"
+            className="w-full md:w-44 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 focus:border-emerald-500 cursor-pointer"
           >
             <option value="All">{t.allMonths}</option>
             {uniqueMonths.map(m => (
@@ -807,7 +807,7 @@ export default function BazaarTab({
                       animate={{ opacity: 1, y: 0 }}
                       className="max-w-xs mx-auto flex flex-col items-center"
                     >
-                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-650">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-600">
                         <ShoppingBag size={28} />
                       </div>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">{t.noEntriesFound}</p>
