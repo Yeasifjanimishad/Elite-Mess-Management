@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Plus, 
   Search, 
@@ -26,7 +26,6 @@ import {
 import { User as UserType, Deposit, SystemSettings, MemberMealSheet, BazaarEntry, Expense } from '../types';
 import { motion } from 'motion/react';
 import { useFeedback } from './FeedbackContext';
-import { getRealCurrentMonth, getEffectiveDatesForMonth, formatMonthLabel, getMonthPickerOptions } from '../utils/dateUtils';
 
 interface DepositTabProps {
   currentUser: UserType;
@@ -60,8 +59,6 @@ export default function DepositTab({
 
   const isManagerOrAdmin = role === 'Admin' || (role === 'Meal Manager' && settings.mgrCanAddDeposit !== false);
   const isBangla = settings.language === 'Bangla';
-  const activeMonth = settings.activeMonth || getRealCurrentMonth();
-  const { today } = getEffectiveDatesForMonth(activeMonth);
 
   const { showToast, showConfirm } = useFeedback();
 
@@ -70,16 +67,6 @@ export default function DepositTab({
   const [methodFilter, setMethodFilter] = useState<string>('All');
   const [memberFilter, setMemberFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [monthFilter, setMonthFilter] = useState<string>(activeMonth);
-
-  useEffect(() => {
-    setMonthFilter(activeMonth);
-  }, [activeMonth]);
-
-  const monthOptions = getMonthPickerOptions(activeMonth, [
-    ...deposits.map(d => d.date.slice(0, 7)),
-    ...(settings.closedMonths?.map(c => c.month) || [])
-  ]);
 
   // New Deposit modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -88,69 +75,58 @@ export default function DepositTab({
   const [formData, setFormData] = useState({
     userId: currentUser.role === 'Member' ? currentUser.id : '',
     amount: '',
-    date: today,
+    date: new Date().toISOString().split('T')[0],
     method: 'Cash' as 'Cash' | 'bKash' | 'Nagad' | 'Bank',
     transactionId: '',
     note: ''
   });
-
-  useEffect(() => {
-    setFormData(prev => ({ ...prev, date: today }));
-  }, [today]);
 
   // Carry Forward Editing State
   const [editingCarryForwardUserId, setEditingCarryForwardUserId] = useState<string | null>(null);
   const [carryForwardInput, setCarryForwardInput] = useState<string>('');
 
   // -------------------------------------------------------------------
-  // SYSTEM FINANCIAL MATH ENGINE (SCOPED TO ACTIVE BILLING MONTH)
+  // SYSTEM FINANCIAL MATH ENGINE
   // -------------------------------------------------------------------
   
-  // Total approved bazaar costs for active month
+  // Total approved bazaar costs
   const totalBazaarCost = bazaarEntries
-    .filter(entry => entry.status === 'Approved' && entry.date.startsWith(activeMonth))
+    .filter(entry => entry.status === 'Approved')
     .reduce((sum, entry) => sum + entry.price, 0);
 
-  // Overhead expenses for active month
-  const totalOtherExpense = expenses
-    .filter(exp => exp.date.startsWith(activeMonth))
-    .reduce((sum, exp) => sum + exp.amount, 0);
+  // Overhead expenses
+  const totalOtherExpense = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const totalExpenses = totalBazaarCost + totalOtherExpense;
 
-  // Total meals consumed across the mess in active month
-  const rawTotalMealsInMonth = meals.reduce((sum, sheet) => {
+  // Total meals consumed across the mess
+  const totalMealsInMonth = meals.reduce((sum, sheet) => {
     let sheetSum = 0;
-    Object.keys(sheet.meals)
-      .filter(date => date.startsWith(activeMonth))
-      .forEach(date => {
-        const m = sheet.meals[date];
-        const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-        const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
-        sheetSum += own + guest;
-      });
+    Object.keys(sheet.meals).forEach(date => {
+      const m = sheet.meals[date];
+      const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
+      const guest = (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
+      sheetSum += own + guest;
+    });
     return sum + sheetSum;
-  }, 0);
-  const totalMealsInMonth = rawTotalMealsInMonth;
+  }, 0) || 1;
 
   // Live meal rate
-  const currentMealRate = totalMealsInMonth > 0 ? totalExpenses / totalMealsInMonth : 0;
+  const currentMealRate = totalExpenses / totalMealsInMonth;
 
   // -------------------------------------------------------------------
-  // MEMBER-SPECIFIC CALCULATIONS (ACTIVE MONTH)
+  // MEMBER-SPECIFIC CALCULATIONS
   // -------------------------------------------------------------------
   
   const getUserMealsCount = (userId: string) => {
     const sheet = meals.find(s => s.userId === userId);
     if (!sheet) return 0;
     let sum = 0;
-    Object.keys(sheet.meals)
-      .filter(date => date.startsWith(activeMonth))
-      .forEach(date => {
-        const m = sheet.meals[date];
-        const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
-        const guest = ((m.guestBreakfast || 0) * 0.5) + ((m.guestLunch || 0) * 1.0) + ((m.guestDinner || 0) * 1.0);
-        sum += own + guest;
-      });
+    Object.keys(sheet.meals).forEach(date => {
+      const m = sheet.meals[date];
+      const own = (m.breakfast ? 0.5 : 0) + (m.lunch ? 1.0 : 0) + (m.dinner ? 1.0 : 0);
+      const guest = (m.guestBreakfast * 0.5) + (m.guestLunch * 1.0) + (m.guestDinner * 1.0);
+      sum += own + guest;
+    });
     return sum;
   };
 
@@ -158,7 +134,7 @@ export default function DepositTab({
   
   const getUserTotalDeposits = (userId: string) => {
     return deposits
-      .filter(d => d.userId === userId && d.date.startsWith(activeMonth) && d.status !== 'Pending' && d.status !== 'Rejected')
+      .filter(d => d.userId === userId && d.status !== 'Pending' && d.status !== 'Rejected')
       .reduce((sum, d) => sum + d.amount, 0);
   };
 
@@ -172,15 +148,15 @@ export default function DepositTab({
   };
 
   // -------------------------------------------------------------------
-  // AGGREGATE TREASURY STATISTICS (ACTIVE MONTH)
+  // AGGREGATE TREASURY STATISTICS
   // -------------------------------------------------------------------
   
   const totalApprovedDeposits = deposits
-    .filter(d => d.date.startsWith(activeMonth) && d.status !== 'Pending' && d.status !== 'Rejected')
+    .filter(d => d.status !== 'Pending' && d.status !== 'Rejected')
     .reduce((sum, d) => sum + d.amount, 0);
 
   const totalPendingDeposits = deposits
-    .filter(d => d.date.startsWith(activeMonth) && d.status === 'Pending')
+    .filter(d => d.status === 'Pending')
     .reduce((sum, d) => sum + d.amount, 0);
 
   const totalCarryForwardSum = allUsers
@@ -226,13 +202,12 @@ export default function DepositTab({
     
     const matchesMethod = methodFilter === 'All' || d.method === methodFilter;
     const matchesMember = memberFilter === 'All' || d.userId === memberFilter;
-    const matchesMonth = monthFilter === 'All' || d.date.startsWith(monthFilter);
     
     // Default legacy undefined deposits as 'Approved'
     const depositStatus = d.status || 'Approved';
     const matchesStatus = statusFilter === 'All' || depositStatus === statusFilter;
 
-    return matchesSearch && matchesMethod && matchesMember && matchesMonth && matchesStatus;
+    return matchesSearch && matchesMethod && matchesMember && matchesStatus;
   });
 
   // -------------------------------------------------------------------
@@ -245,10 +220,10 @@ export default function DepositTab({
     if (currentUser.role !== 'Member') {
       const firstActive = allUsers.find(u => u.isActive);
       if (firstActive) {
-        setFormData(prev => ({ ...prev, userId: firstActive.id, date: today }));
+        setFormData(prev => ({ ...prev, userId: firstActive.id }));
       }
     } else {
-      setFormData(prev => ({ ...prev, userId: currentUser.id, date: today }));
+      setFormData(prev => ({ ...prev, userId: currentUser.id }));
     }
   };
 
@@ -258,7 +233,7 @@ export default function DepositTab({
     setFormData({
       userId: currentUser.role === 'Member' ? currentUser.id : '',
       amount: '',
-      date: today,
+      date: new Date().toISOString().split('T')[0],
       method: 'Cash',
       transactionId: '',
       note: ''
@@ -382,7 +357,7 @@ export default function DepositTab({
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
               {isBangla ? 'মোট সংগৃহীত ডিপোজিট' : 'Total Deposits pool'}
             </span>
-            <span className="text-xl font-black text-slate-900 dark:text-white mt-1 block">
+            <span className="text-xl font-black text-slate-850 dark:text-white mt-1 block">
               {settings.currency}{totalApprovedDeposits.toLocaleString()}
             </span>
           </div>
@@ -430,7 +405,7 @@ export default function DepositTab({
             <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
               {isBangla ? 'মোট বকেয়া খতিয়ান' : 'Total Outstanding Dues'}
             </span>
-            <span className="text-xl font-black text-rose-600 dark:text-rose-400 mt-1 block">
+            <span className="text-xl font-black text-rose-600 dark:text-rose-455 mt-1 block">
               {settings.currency}{totalPendingDuesSum.toLocaleString()}
             </span>
           </div>
@@ -443,7 +418,7 @@ export default function DepositTab({
       {/* PENDING APPROVAL QUEUE (ONLY FOR MANAGER) */}
       {/* ------------------------------------------------------------------- */}
       {isManagerOrAdmin && deposits.some(d => d.status === 'Pending') && (
-        <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
+        <div className="bg-amber-550/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2">
             <Clock className="text-amber-600 dark:text-amber-400" size={18} />
             <h3 className="font-bold text-slate-900 dark:text-white text-sm">
@@ -484,7 +459,7 @@ export default function DepositTab({
                       </div>
                     )}
                     {deposit.note && (
-                      <div className="border-t border-slate-50 dark:border-slate-800 pt-1.5 mt-1.5 italic text-slate-400">
+                      <div className="border-t border-slate-50 dark:border-slate-800 pt-1.5 mt-1.5 italic text-slate-450">
                         "{deposit.note}"
                       </div>
                     )}
@@ -516,7 +491,7 @@ export default function DepositTab({
       {/* ------------------------------------------------------------------- */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-xs">
         <div>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
             <AlertCircle className="text-rose-500" size={16} />
             {isBangla ? 'সদস্যদের বকেয়া ও আমানতের বিবরণী (লাইভ)' : 'Live Member Balance & Outstanding Dues'}
           </h3>
@@ -541,7 +516,7 @@ export default function DepositTab({
             </thead>
             <tbody>
               {memberBalancesList.map((m) => (
-                <tr key={m.id} className="border-b border-slate-50 dark:border-slate-800 text-xs hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition">
+                <tr key={m.id} className="border-b border-slate-50 dark:border-slate-800 text-xs hover:bg-slate-50/40 dark:hover:bg-slate-850/10 transition">
                   {/* User profile */}
                   <td className="px-5 py-3 flex items-center gap-2.5">
                     <img src={m.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-6.5 h-6.5 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
@@ -563,7 +538,7 @@ export default function DepositTab({
                   </td>
 
                   {/* Bill */}
-                  <td className="px-5 py-3 text-center font-semibold text-slate-500 dark:text-slate-400">
+                  <td className="px-5 py-3 text-center font-semibold text-slate-550 dark:text-slate-400">
                     {settings.currency}{m.bill.toFixed(2)}
                   </td>
 
@@ -599,7 +574,7 @@ export default function DepositTab({
       {isManagerOrAdmin && (
         <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-xs">
           <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-850 dark:text-white flex items-center gap-2">
               <Plus className="text-indigo-500" size={16} />
               {isBangla ? 'সদস্যদের ক্যারী ফরওয়ার্ড ব্যালেন্স পরিবর্তন' : 'Manage Carry Forward Balances'}
             </h3>
@@ -726,20 +701,6 @@ export default function DepositTab({
             <option value="Pending">{isBangla ? 'অপেক্ষমাণ' : 'Pending'}</option>
             <option value="Rejected">{isBangla ? 'বাতিলকৃত' : 'Rejected'}</option>
           </select>
-
-          {/* Month filter */}
-          <select
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-            className="text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold cursor-pointer"
-          >
-            <option value="All">{isBangla ? 'সব মাস' : 'All Months'}</option>
-            {monthOptions.map(m => (
-              <option key={m} value={m}>
-                {formatMonthLabel(m, settings.language)}{m === activeMonth ? (isBangla ? ' (চলতি)' : ' (Active)') : ''}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Add deposit button */}
@@ -782,12 +743,12 @@ export default function DepositTab({
                 return (
                   <tr 
                     key={deposit.id} 
-                    className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition"
+                    className="border-b border-slate-100 dark:border-slate-800 text-xs text-slate-750 dark:text-slate-300 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition"
                   >
                     {/* User */}
                     <td className="px-5 py-3.5 flex items-center gap-2.5">
                       <img src={u.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'} className="w-6.5 h-6.5 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />
-                      <span className="font-semibold text-slate-900 dark:text-white">{u.name}</span>
+                      <span className="font-semibold text-slate-850 dark:text-white">{u.name}</span>
                     </td>
 
                     {/* Amount */}
@@ -874,7 +835,7 @@ export default function DepositTab({
                       animate={{ opacity: 1, y: 0 }}
                       className="max-w-xs mx-auto flex flex-col items-center"
                     >
-                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-600">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-650">
                         <Coins size={28} />
                       </div>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
@@ -901,7 +862,7 @@ export default function DepositTab({
             
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                <h3 className="text-lg font-bold text-slate-850 dark:text-white">
                   {isManagerOrAdmin 
                     ? (isBangla ? 'আমানত রেকর্ড করুন' : 'Record Member Deposit')
                     : (isBangla ? 'আমানতের দাবি জমা দিন' : 'Request Deposit Credit')}
@@ -923,7 +884,7 @@ export default function DepositTab({
             <form onSubmit={handleSubmit} className="space-y-4">
               
               {duplicateWarning && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/15 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2">
+                <div className="p-3 bg-rose-500/10 border border-rose-500/15 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2 animate-pulse">
                   <AlertCircle size={16} className="shrink-0 mt-0.5" />
                   <span>{duplicateWarning}</span>
                 </div>

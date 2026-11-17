@@ -1,5 +1,4 @@
 import { User, MemberMealSheet, Deposit, BazaarEntry, Expense, Notice, ActivityLog, SystemSettings } from './types';
-import { getRealCurrentMonth, getMonthDates } from './utils/dateUtils';
 
 export const initialUsers: User[] = [
   {
@@ -78,8 +77,6 @@ export const initialUsers: User[] = [
 
 export const initialSettings: SystemSettings = {
   systemName: 'Elite Mess Management',
-  activeMonth: getRealCurrentMonth(),
-  closedMonths: [],
   mealLockTime: '22:00',
   defaultMealOn: true,
   currency: '৳',
@@ -95,11 +92,11 @@ export const initialSettings: SystemSettings = {
 };
 
 // Clean initial meals (all meals set to off/0 for fresh mess state)
-export const generateInitialMeals = (users: User[], monthStr: string = getRealCurrentMonth()): MemberMealSheet[] => {
-  const monthDates = getMonthDates(monthStr);
+export const generateInitialMeals = (users: User[]): MemberMealSheet[] => {
   return users.map((user) => {
     const meals: { [date: string]: any } = {};
-    monthDates.forEach((dateStr) => {
+    for (let day = 1; day <= 31; day++) {
+      const dateStr = `2026-07-${day < 10 ? '0' + day : day}`;
       meals[dateStr] = {
         breakfast: false,
         lunch: false,
@@ -108,7 +105,7 @@ export const generateInitialMeals = (users: User[], monthStr: string = getRealCu
         guestLunch: 0,
         guestDinner: 0
       };
-    });
+    }
     return {
       userId: user.id,
       meals

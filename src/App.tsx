@@ -7,10 +7,10 @@ import {
   Lock,
   ChevronRight,
   Menu,
+  Moon,
+  Sun,
   X,
-  Bell,
-  Palette,
-  Check
+  Bell
 } from 'lucide-react';
 
 // Domain types
@@ -25,17 +25,8 @@ import {
   ActivityLog, 
   SystemSettings,
   VacationPeriod,
-  AppNotification,
-  ClosedMonthRecord
+  AppNotification
 } from './types';
-import {
-  getRealCurrentMonth,
-  getRealTodayStr,
-  getMonthDates,
-  getNextMonth,
-  formatMonthLabel,
-  getEffectiveDatesForMonth
-} from './utils/dateUtils';
 
 // Dummy initial data
 import { 
@@ -181,7 +172,7 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((u: User) => ({ ...u, carryForward: 0 }));
         }
       } catch (e) {}
     }
@@ -248,37 +239,11 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.systemName) {
-          return {
-            ...initialSettings,
-            ...parsed,
-            activeMonth: parsed.activeMonth || getRealCurrentMonth(),
-            closedMonths: Array.isArray(parsed.closedMonths) ? parsed.closedMonths : []
-          };
-        }
+        if (parsed && parsed.systemName) return parsed;
       } catch (e) {}
     }
     return initialSettings;
   });
-
-  const activeMonth = settings.activeMonth || getRealCurrentMonth();
-
-  type ThemePreset = NonNullable<SystemSettings['theme']>;
-  const [userThemes, setUserThemes] = useState<Record<string, ThemePreset>>(() => {
-    const saved = localStorage.getItem('mms_user_themes');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') return parsed;
-      } catch (e) {}
-    }
-    return {};
-  });
-  const [themeMenuOpen, setThemeMenuOpen] = useState<boolean>(false);
-
-  useEffect(() => {
-    localStorage.setItem('mms_user_themes', JSON.stringify(userThemes));
-  }, [userThemes]);
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
     const saved = localStorage.getItem('mms_activity_logs');
@@ -350,50 +315,16 @@ export default function App() {
   }));
   const [currentPersona, setCurrentPersona] = useState<UserRole>('Member');
   const [loadingSession, setLoadingSession] = useState<boolean>(true);
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false);
-  const [authRedirectError, setAuthRedirectError] = useState<string>('');
-  const isRecoveryRef = React.useRef<boolean>(false);
-
-  const mealsRef = React.useRef<MemberMealSheet[]>(meals);
-  useEffect(() => {
-    mealsRef.current = meals;
-  }, [meals]);
-
-  // Helper to sync a single day's meal record to Supabase with mess_id
-  const syncSingleMealToSupabase = React.useCallback((userId: string, dateStr: string, dayMeal: MemberMealSheet['meals'][string]) => {
-    if (!isSupabaseConfigured) return;
-    getSupabaseUserAndMessId(userId, users, currentUser).then(({ userId: dbUserId, messId }) => {
-      if (!isUUID(dbUserId) || !messId) return;
-      supabase.from('meals').upsert({
-        mess_id: messId,
-        user_id: dbUserId,
-        date: dateStr,
-        breakfast: Boolean(dayMeal.breakfast),
-        lunch: Boolean(dayMeal.lunch),
-        dinner: Boolean(dayMeal.dinner),
-        guest_breakfast: dayMeal.guestBreakfast || 0,
-        guest_lunch: dayMeal.guestLunch || 0,
-        guest_dinner: dayMeal.guestDinner || 0,
-        manager_adjustment: dayMeal.managerAdjustment || 0,
-        adjustment_reason: dayMeal.adjustmentReason || null
-      }, { onConflict: 'user_id,date' }).then(({ error }) => {
-        if (error) console.error("Error upserting meal to Supabase:", error);
-      });
-    });
-  }, [users, currentUser]);
 
   // Synchronize database records from Supabase and subscribe to Realtime postgres_changes
   useEffect(() => {
     if (!isSupabaseConfigured || !isAuthenticated || !currentUser?.id) return;
 
-    let isMounted = true;
-
     async function syncAllDataFromSupabase() {
       try {
         // 1. Fetch Users
-        let resolvedUsers: User[] = users;
         const { data: dbUsers, error: usersErr } = await supabase.from('users').select('*');
-        if (dbUsers && dbUsers.length > 0 && !usersErr && isMounted) {
+        if (dbUsers && dbUsers.length > 0 && !usersErr) {
           const mappedUsers: User[] = dbUsers.map(u => ({
             id: u.id,
             messId: u.mess_id,
@@ -406,30 +337,12 @@ export default function App() {
             defaultMealOn: u.default_meal_on,
             carryForward: u.carry_forward ? parseFloat(u.carry_forward) : 0,
           }));
-          resolvedUsers = mappedUsers;
           setUsers(mappedUsers);
-
-          // Keep currentUser role/status up to date if Admin changed it on another device
-          const freshMe = mappedUsers.find(u => u.id === currentUser.id);
-          if (freshMe) {
-            setCurrentUser(prev => {
-              if (
-                prev.role !== freshMe.role ||
-                prev.isActive !== freshMe.isActive ||
-                prev.name !== freshMe.name ||
-                prev.messId !== freshMe.messId ||
-                prev.carryForward !== freshMe.carryForward
-              ) {
-                return { ...prev, ...freshMe };
-              }
-              return prev;
-            });
-          }
         }
 
         // 2. Fetch Deposits
         const { data: dbDeposits, error: depErr } = await supabase.from('deposits').select('*');
-        if (dbDeposits && !depErr && isMounted) {
+        if (dbDeposits && !depErr) {
           const mappedDeposits: Deposit[] = dbDeposits.map(d => ({
             id: String(d.id),
             userId: d.user_id,
@@ -441,9 +354,9 @@ export default function App() {
             status: (d.status || 'Pending') as any
           }));
           setDeposits(prev => {
-            const localUnsynced = prev.filter(d => String(d.id).startsWith('dep-'));
+            const localPending = prev.filter(d => String(d.id).startsWith('dep-') || d.status === 'Pending');
             const combined = [...mappedDeposits];
-            localUnsynced.forEach(localDep => {
+            localPending.forEach(localDep => {
               if (!combined.some(d => d.id === localDep.id)) {
                 combined.unshift(localDep);
               }
@@ -454,12 +367,12 @@ export default function App() {
 
         // 3. Fetch Bazaar Entries
         const { data: dbBazaar, error: bazErr } = await supabase.from('bazaar_entries').select('*');
-        if (dbBazaar && !bazErr && isMounted) {
+        if (dbBazaar && !bazErr) {
           const mappedBazaar: BazaarEntry[] = dbBazaar.map(b => ({
             id: String(b.id),
             date: b.date,
             items: b.items || 'Bazaar Expense',
-            quantity: b.quantity != null ? String(b.quantity) : '1',
+            quantity: b.quantity || 1,
             price: parseFloat(b.price || b.subtotal || '0'),
             subtotal: b.subtotal ? parseFloat(b.subtotal) : parseFloat(b.price || '0'),
             assignedTo: [b.user_id || b.assigned_to || b.approved_by || currentUser?.id || 'u-1'],
@@ -469,9 +382,9 @@ export default function App() {
             notes: b.notes || undefined
           }));
           setBazaarEntries(prev => {
-            const localUnsynced = prev.filter(b => String(b.id).startsWith('baz-'));
+            const localPending = prev.filter(b => String(b.id).startsWith('baz-') || b.status === 'Pending');
             const combined = [...mappedBazaar];
-            localUnsynced.forEach(localBaz => {
+            localPending.forEach(localBaz => {
               if (!combined.some(b => b.id === localBaz.id)) {
                 combined.unshift(localBaz);
               }
@@ -482,7 +395,7 @@ export default function App() {
 
         // 4. Fetch Expenses
         const { data: dbExpenses, error: expErr } = await supabase.from('expenses').select('*');
-        if (dbExpenses && !expErr && isMounted) {
+        if (dbExpenses && !expErr) {
           const mappedExpenses: Expense[] = dbExpenses.map(e => ({
             id: String(e.id),
             category: e.category,
@@ -495,7 +408,7 @@ export default function App() {
 
         // 5. Fetch Vacations
         const { data: dbVacations, error: vacErr } = await supabase.from('vacation_periods').select('*');
-        if (dbVacations && !vacErr && isMounted) {
+        if (dbVacations && !vacErr) {
           const mappedVacations: VacationPeriod[] = dbVacations.map(v => ({
             id: String(v.id),
             userId: v.user_id,
@@ -507,7 +420,7 @@ export default function App() {
 
         // 6. Fetch Meals
         const { data: dbMeals, error: mealsErr } = await supabase.from('meals').select('*');
-        if (dbMeals && dbMeals.length > 0 && !mealsErr && isMounted) {
+        if (dbMeals && dbMeals.length > 0 && !mealsErr) {
           const userMealsMap: Record<string, MemberMealSheet['meals']> = {};
           dbMeals.forEach(m => {
             if (!userMealsMap[m.user_id]) {
@@ -547,119 +460,6 @@ export default function App() {
             return updated;
           });
         }
-
-        // 7. Fetch Notices
-        const { data: dbNotices, error: noticesErr } = await supabase
-          .from('notices')
-          .select('*')
-          .order('date', { ascending: false });
-        if (dbNotices && !noticesErr && isMounted) {
-          const mappedNotices: Notice[] = dbNotices.map(n => {
-            const author = resolvedUsers.find(u => u.id === n.author_id);
-            return {
-              id: String(n.id),
-              title: n.title,
-              description: n.description,
-              priority: n.priority as Notice['priority'],
-              date: n.date,
-              authorId: n.author_id,
-              authorName: author?.name || 'Mess Admin',
-              attachment: n.attachment || undefined,
-              expiryDate: n.expiry_date || undefined,
-              isPinned: Boolean(n.is_pinned),
-            };
-          });
-          setNotices(prev => {
-            const localUnsynced = prev.filter(n => String(n.id).startsWith('not-'));
-            const combined = [...mappedNotices];
-            localUnsynced.forEach(localN => {
-              if (!combined.some(n => n.id === localN.id)) {
-                combined.unshift(localN);
-              }
-            });
-            return combined;
-          });
-        }
-
-        // 8. Fetch Notifications (Cross-device Admin -> Member alerts)
-        const { data: dbNotifs, error: notifsErr } = await supabase
-          .from('notifications')
-          .select('*')
-          .order('timestamp', { ascending: false })
-          .limit(100);
-        if (dbNotifs && !notifsErr && isMounted) {
-          const mappedNotifs: AppNotification[] = dbNotifs.map(n => ({
-            id: String(n.id),
-            type: n.type as AppNotification['type'],
-            title: n.title,
-            description: n.description,
-            date: n.date,
-            isRead: Boolean(n.is_read),
-            targetUserId: n.target_user_id || undefined,
-            linkToTab: n.link_to_tab || undefined,
-            timestamp: n.timestamp || new Date().toISOString(),
-          }));
-          setNotifications(prev => {
-            const localUnsynced = prev.filter(n => String(n.id).startsWith('notif-'));
-            const combined = [...mappedNotifs];
-            localUnsynced.forEach(localN => {
-              if (!combined.some(n => n.id === localN.id)) {
-                combined.unshift(localN);
-              }
-            });
-            return combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-          });
-        }
-
-        // 9. Fetch System Settings
-        const { data: dbSettings, error: settingsErr } = await supabase
-          .from('system_settings')
-          .select('*')
-          .limit(1)
-          .maybeSingle();
-        if (dbSettings && !settingsErr && isMounted) {
-          setSettings(prev => ({
-            ...prev,
-            systemName: dbSettings.system_name || prev.systemName,
-            mealLockTime: dbSettings.meal_lock_time || prev.mealLockTime,
-            defaultMealOn: dbSettings.default_meal_on ?? prev.defaultMealOn,
-            currency: dbSettings.currency || prev.currency,
-            guestMealLimit: dbSettings.guest_meal_limit ?? prev.guestMealLimit,
-            isMonthClosed: dbSettings.is_month_closed ?? prev.isMonthClosed,
-            language: (dbSettings.language as SystemSettings['language']) || prev.language,
-            activeMonth: dbSettings.active_month || prev.activeMonth,
-            mgrCanApproveBazaar: dbSettings.mgr_can_approve_bazaar ?? prev.mgrCanApproveBazaar,
-            mgrCanAddDeposit: dbSettings.mgr_can_add_deposit ?? prev.mgrCanAddDeposit,
-            mgrCanAddExpense: dbSettings.mgr_can_add_expense ?? prev.mgrCanAddExpense,
-            mgrCanManageUsers: dbSettings.mgr_can_manage_users ?? prev.mgrCanManageUsers,
-            mgrCanPublishNotice: dbSettings.mgr_can_publish_notice ?? prev.mgrCanPublishNotice,
-          }));
-        }
-
-        // 10. Fetch Activity Logs
-        const { data: dbLogs, error: logsErr } = await supabase
-          .from('activity_logs')
-          .select('*')
-          .order('timestamp', { ascending: false })
-          .limit(100);
-        if (dbLogs && dbLogs.length > 0 && !logsErr && isMounted) {
-          const mappedLogs: ActivityLog[] = dbLogs.map(l => {
-            const actor = resolvedUsers.find(u => u.id === l.user_id);
-            const ts = l.timestamp || new Date().toISOString();
-            const dt = new Date(ts);
-            return {
-              id: String(l.id),
-              userId: l.user_id,
-              userName: actor?.name || 'Resident',
-              action: l.action,
-              details: l.details,
-              timestamp: ts,
-              date: !isNaN(dt.getTime()) ? dt.toISOString().slice(0, 10) : undefined,
-              time: !isNaN(dt.getTime()) ? dt.toTimeString().split(' ')[0] : undefined,
-            };
-          });
-          setActivityLogs(mappedLogs);
-        }
       } catch (err) {
         console.error("Error in syncAllDataFromSupabase:", err);
       }
@@ -675,24 +475,7 @@ export default function App() {
       })
       .subscribe();
 
-    // Polling & Window Focus Fallback (ensures sync even if Realtime publication is not enabled on all tables)
-    const intervalId = window.setInterval(() => {
-      syncAllDataFromSupabase();
-    }, 12000);
-
-    const handleVisibilityOrFocus = () => {
-      if (document.visibilityState === 'visible') {
-        syncAllDataFromSupabase();
-      }
-    };
-    window.addEventListener('focus', handleVisibilityOrFocus);
-    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
-
     return () => {
-      isMounted = false;
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', handleVisibilityOrFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       supabase.removeChannel(channel);
     };
   }, [isAuthenticated, currentUser?.id]);
@@ -704,75 +487,9 @@ export default function App() {
       return;
     }
 
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const searchParams = new URLSearchParams(window.location.search);
-    const urlError =
-      hashParams.get('error_description') ||
-      searchParams.get('error_description') ||
-      hashParams.get('error') ||
-      searchParams.get('error');
-    const urlErrorCode = hashParams.get('error_code') || searchParams.get('error_code');
-    const typeParam = hashParams.get('type') || searchParams.get('type');
-    const tokenHash = searchParams.get('token_hash');
-
-    if (urlError) {
-      const isExpired = urlErrorCode === 'otp_expired' || urlError.toLowerCase().includes('expired');
-      const friendlyMsg = isExpired
-        ? 'Password reset link is invalid or has expired. Please request a new reset link.'
-        : decodeURIComponent(urlError.replace(/\+/g, ' '));
-      setAuthRedirectError(friendlyMsg);
-      isRecoveryRef.current = false;
-      setIsPasswordRecovery(false);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (typeParam === 'recovery') {
-      isRecoveryRef.current = true;
-      setIsPasswordRecovery(true);
-    }
-
-    if (tokenHash && typeParam === 'recovery') {
-      (async () => {
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: 'recovery',
-        });
-        if (otpError) {
-          setAuthRedirectError(otpError.message || 'Password reset link verification failed.');
-          isRecoveryRef.current = false;
-          setIsPasswordRecovery(false);
-        } else {
-          isRecoveryRef.current = true;
-          setIsPasswordRecovery(true);
-        }
-        window.history.replaceState({}, document.title, window.location.pathname);
-        setLoadingSession(false);
-      })();
-    }
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        isRecoveryRef.current = true;
-        setIsPasswordRecovery(true);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        setLoadingSession(false);
-        return;
-      }
-
-      if (event === 'SIGNED_OUT') {
-        isRecoveryRef.current = false;
-        setIsPasswordRecovery(false);
-        setIsAuthenticated(false);
-        setLoadingSession(false);
-        return;
-      }
-
-      if (isRecoveryRef.current && session?.user) {
-        setIsPasswordRecovery(true);
-        setLoadingSession(false);
-        return;
-      }
-
+      setLoadingSession(true);
       if (session?.user) {
-        setLoadingSession(true);
         try {
           const { data: dbUser, error } = await supabase
             .from('users')
@@ -783,7 +500,6 @@ export default function App() {
           if (dbUser && !error) {
             const mappedUser: User = {
               id: dbUser.id,
-              messId: dbUser.mess_id,
               name: dbUser.name,
               email: dbUser.email,
               phone: dbUser.phone || '',
@@ -810,7 +526,6 @@ export default function App() {
                 if (retryUser && !retryError) {
                   const mappedUser: User = {
                     id: retryUser.id,
-                    messId: retryUser.mess_id,
                     name: retryUser.name,
                     email: retryUser.email,
                     phone: retryUser.phone || '',
@@ -929,18 +644,6 @@ export default function App() {
     }
   }, [currentUser, currentTab, settings]);
 
-  // Resolve personal theme per user (falls back to global default settings.theme)
-  const themeUserKey = currentUser?.id || 'default';
-  const activeUserTheme: ThemePreset =
-    userThemes[themeUserKey] || settings.theme || 'Light';
-
-  const handleUpdateUserTheme = (theme: ThemePreset) => {
-    setUserThemes(prev => ({
-      ...prev,
-      [themeUserKey]: theme
-    }));
-  };
-
   // Dark Mode tailwind class toggling
   useEffect(() => {
     const root = window.document.documentElement;
@@ -951,13 +654,13 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Synchronize Theme Preset Classes for active user
+  // Synchronize Theme Preset Classes
   useEffect(() => {
     const root = window.document.documentElement;
     // Remove all previous theme classes
     root.classList.remove('theme-light', 'theme-dark', 'theme-cosmic', 'theme-emerald', 'theme-pink');
     
-    const theme = activeUserTheme || 'Light';
+    const theme = settings.theme || 'Light';
     if (theme === 'Light') {
       root.classList.add('theme-light');
       setDarkMode(false);
@@ -974,7 +677,7 @@ export default function App() {
       root.classList.add('theme-pink');
       setDarkMode(true);
     }
-  }, [activeUserTheme]);
+  }, [settings.theme]);
 
   // Handle Authentication Success
   const handleLoginSuccess = (user: User) => {
@@ -1135,21 +838,6 @@ export default function App() {
       time: timeStr
     };
     setActivityLogs(prev => [newLog, ...prev]);
-
-    if (isSupabaseConfigured && isAuthenticated) {
-      getSupabaseUserAndMessId(currentUserId, users, currentUser).then(({ userId: dbUserId, messId }) => {
-        if (!messId || !isUUID(dbUserId)) return;
-        supabase.from('activity_logs').insert({
-          mess_id: messId,
-          user_id: dbUserId,
-          action: mappedAction,
-          details: details,
-          timestamp: now.toISOString(),
-        }).then(({ error }) => {
-          if (error) console.warn("Could not persist activity log to Supabase:", error.message);
-        });
-      });
-    }
   };
 
   // -------------------------------------------------------------------
@@ -1159,11 +847,6 @@ export default function App() {
   // 1. Mark a notification as read
   const handleMarkNotificationAsRead = (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-    if (isSupabaseConfigured && isUUID(id)) {
-      supabase.from('notifications').update({ is_read: true }).eq('id', id).then(({ error }) => {
-        if (error) console.error("Error marking notification read in Supabase:", error);
-      });
-    }
   };
 
   // 2. Mark all relevant notifications as read
@@ -1174,33 +857,14 @@ export default function App() {
       }
       return n;
     }));
-    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
-      supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('is_read', false)
-        .or(`target_user_id.eq.${currentUser.id},target_user_id.is.null`)
-        .then(({ error }) => {
-          if (error) console.error("Error marking all notifications read in Supabase:", error);
-        });
-    }
   };
 
   // 3. Clear all relevant notifications
   const handleClearAllNotifications = () => {
     setNotifications(prev => prev.filter(n => n.targetUserId && n.targetUserId !== currentUser.id));
-    if (isSupabaseConfigured && isUUID(currentUser?.id)) {
-      supabase
-        .from('notifications')
-        .delete()
-        .eq('target_user_id', currentUser.id)
-        .then(({ error }) => {
-          if (error) console.warn("Could not clear notifications in Supabase:", error.message);
-        });
-    }
   };
 
-  // 4. Push general or targeted notification (Syncs to Supabase for cross-device delivery!)
+  // 4. Push general or targeted notification
   const handleAddNotification = (
     type: AppNotification['type'],
     title: string,
@@ -1208,46 +872,18 @@ export default function App() {
     targetUserId?: string,
     linkToTab?: string
   ) => {
-    const tempId = `notif-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    const todayDate = getRealTodayStr();
-    const ts = new Date().toISOString();
     const newNotif: AppNotification = {
-      id: tempId,
+      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       type,
       title,
       description,
-      date: todayDate,
+      date: '2026-07-18', // July 2026 current month hardcoded context
       isRead: false,
       targetUserId,
       linkToTab,
-      timestamp: ts
+      timestamp: new Date().toISOString()
     };
     setNotifications(prev => [newNotif, ...prev]);
-
-    if (isSupabaseConfigured) {
-      getSupabaseUserAndMessId(currentUser?.id || '', users, currentUser).then(({ messId }) => {
-        if (!messId) return;
-        const payload = {
-          mess_id: messId,
-          type,
-          title,
-          description,
-          date: todayDate,
-          is_read: false,
-          target_user_id: targetUserId && isUUID(targetUserId) ? targetUserId : null,
-          link_to_tab: linkToTab || null,
-          timestamp: ts,
-        };
-        supabase.from('notifications').insert(payload).select().then(({ data, error }) => {
-          if (data && data[0] && !error) {
-            const realId = String(data[0].id);
-            setNotifications(prev => prev.map(n => n.id === tempId ? { ...n, id: realId } : n));
-          } else if (error) {
-            console.error("Error inserting notification to Supabase:", error);
-          }
-        });
-      });
-    }
   };
 
   // 5. Trigger Meal Reminder callback
@@ -1406,8 +1042,8 @@ export default function App() {
     setIsAuthenticated(true);
   };
 
-  // Guard Screen: Render LoginScreen if not authenticated OR during password recovery
-  if (!isAuthenticated || isPasswordRecovery) {
+  // Guard Screen: Render LoginScreen if not authenticated
+  if (!isAuthenticated) {
     return (
       <div className={darkMode ? 'dark' : ''}>
         <LoginScreen 
@@ -1415,27 +1051,6 @@ export default function App() {
           onLanguageChange={(lang) => setSettings(prev => ({ ...prev, language: lang }))}
           onDemoLogin={handleDemoLogin}
           onLocalLogin={handleLocalLogin}
-          isPasswordRecovery={isPasswordRecovery}
-          initialError={authRedirectError}
-          onClearInitialError={() => setAuthRedirectError('')}
-          onPasswordResetSuccess={async () => {
-            window.history.replaceState({}, document.title, window.location.pathname);
-            isRecoveryRef.current = false;
-            setIsPasswordRecovery(false);
-            setIsAuthenticated(false);
-            if (isSupabaseConfigured) {
-              await supabase.auth.signOut();
-            }
-          }}
-          onCancelPasswordRecovery={async () => {
-            window.history.replaceState({}, document.title, window.location.pathname);
-            isRecoveryRef.current = false;
-            setIsPasswordRecovery(false);
-            setIsAuthenticated(false);
-            if (isSupabaseConfigured) {
-              await supabase.auth.signOut();
-            }
-          }}
         />
       </div>
     );
@@ -1448,19 +1063,18 @@ export default function App() {
   // Update tomorrow's meal reservations (Dashboard)
   const handleUpdateTomorrowMeals = (updatedStatus: { breakfast: boolean; lunch: boolean; dinner: boolean }) => {
     if (settings.isMonthClosed) return;
-    const tomorrowDate = getEffectiveDatesForMonth(activeMonth).tomorrow;
 
     // Find current user's meal sheet
-    let updatedDayMeal: MemberMealSheet['meals'][string] | null = null;
     setMeals(prevSheets => {
       return prevSheets.map(sheet => {
         if (sheet.userId === currentUser.id) {
           const updatedMeals = { ...sheet.meals };
-          updatedDayMeal = {
+          const tomorrowDate = '2026-07-19'; // hardcoded target month tomorrow date
+          
+          updatedMeals[tomorrowDate] = {
             ...updatedMeals[tomorrowDate],
             ...updatedStatus
           };
-          updatedMeals[tomorrowDate] = updatedDayMeal;
 
           return {
             ...sheet,
@@ -1471,13 +1085,9 @@ export default function App() {
       });
     });
 
-    if (updatedDayMeal) {
-      syncSingleMealToSupabase(currentUser.id, tomorrowDate, updatedDayMeal);
-    }
-
     logAction(
       'Meal Reservation Update',
-      `Updated tomorrow's (${tomorrowDate}) meals: Breakfast=${updatedStatus.breakfast ? 'ON' : 'OFF'}, Lunch=${updatedStatus.lunch ? 'ON' : 'OFF'}, Dinner=${updatedStatus.dinner ? 'ON' : 'OFF'}`
+      `Updated tomorrow's (${'2026-07-19'}) meals: Breakfast=${updatedStatus.breakfast ? 'ON' : 'OFF'}, Lunch=${updatedStatus.lunch ? 'ON' : 'OFF'}, Dinner=${updatedStatus.dinner ? 'ON' : 'OFF'}`
     );
   };
 
@@ -1491,7 +1101,6 @@ export default function App() {
       return;
     }
 
-    let nextDayMeal: MemberMealSheet['meals'][string] | null = null;
     setMeals(prevSheets => {
       return prevSheets.map(sheet => {
         if (sheet.userId === userId) {
@@ -1505,11 +1114,10 @@ export default function App() {
             guestDinner: 0
           };
 
-          nextDayMeal = {
+          updatedMeals[date] = {
             ...targetDay,
             [mealType]: !targetDay[mealType]
           };
-          updatedMeals[date] = nextDayMeal;
 
           return {
             ...sheet,
@@ -1519,10 +1127,6 @@ export default function App() {
         return sheet;
       });
     });
-
-    if (nextDayMeal) {
-      syncSingleMealToSupabase(userId, date, nextDayMeal);
-    }
 
     const uName = users.find(u => u.id === userId)?.name || 'Unknown';
     logAction(
@@ -1538,7 +1142,6 @@ export default function App() {
 
     if (currentPersona === 'Member' && userId !== currentUser.id) return;
 
-    let nextDayMeal: MemberMealSheet['meals'][string] | null = null;
     setMeals(prevSheets => {
       return prevSheets.map(sheet => {
         if (sheet.userId === userId) {
@@ -1554,11 +1157,10 @@ export default function App() {
 
           const fieldKey = mealType === 'breakfast' ? 'guestBreakfast' : mealType === 'lunch' ? 'guestLunch' : 'guestDinner';
 
-          nextDayMeal = {
+          updatedMeals[date] = {
             ...targetDay,
             [fieldKey]: count
           };
-          updatedMeals[date] = nextDayMeal;
 
           return {
             ...sheet,
@@ -1569,10 +1171,6 @@ export default function App() {
       });
     });
 
-    if (nextDayMeal) {
-      syncSingleMealToSupabase(userId, date, nextDayMeal);
-    }
-
     const uName = users.find(u => u.id === userId)?.name || 'Unknown';
     logAction(
       'Guest Count Modified',
@@ -1580,30 +1178,28 @@ export default function App() {
     );
   };
 
-  // Update Meals (Syncs only changed meal cells to Supabase with mess_id)
+  // Update Meals (Syncs to Supabase)
   const handleUpdateMeals = (updatedMeals: MemberMealSheet[]) => {
-    const prevMeals = mealsRef.current;
     setMeals(updatedMeals);
 
     if (isSupabaseConfigured) {
       updatedMeals.forEach(sheet => {
-        const prevSheet = prevMeals.find(s => s.userId === sheet.userId);
         Object.keys(sheet.meals).forEach(dateStr => {
           const dayMeal = sheet.meals[dateStr];
-          const prevDay = prevSheet?.meals[dateStr];
-          const isChanged = !prevDay ||
-            prevDay.breakfast !== dayMeal.breakfast ||
-            prevDay.lunch !== dayMeal.lunch ||
-            prevDay.dinner !== dayMeal.dinner ||
-            (prevDay.guestBreakfast || 0) !== (dayMeal.guestBreakfast || 0) ||
-            (prevDay.guestLunch || 0) !== (dayMeal.guestLunch || 0) ||
-            (prevDay.guestDinner || 0) !== (dayMeal.guestDinner || 0) ||
-            (prevDay.managerAdjustment || 0) !== (dayMeal.managerAdjustment || 0) ||
-            (prevDay.adjustmentReason || '') !== (dayMeal.adjustmentReason || '');
-
-          if (isChanged) {
-            syncSingleMealToSupabase(sheet.userId, dateStr, dayMeal);
-          }
+          supabase.from('meals').upsert({
+            user_id: sheet.userId,
+            date: dateStr,
+            breakfast: dayMeal.breakfast,
+            lunch: dayMeal.lunch,
+            dinner: dayMeal.dinner,
+            guest_breakfast: dayMeal.guestBreakfast,
+            guest_lunch: dayMeal.guestLunch,
+            guest_dinner: dayMeal.guestDinner,
+            manager_adjustment: dayMeal.managerAdjustment || 0,
+            adjustment_reason: dayMeal.adjustmentReason || null
+          }, { onConflict: 'user_id,date' }).then(({ error }) => {
+            if (error) console.error("Error upserting meal to Supabase:", error);
+          });
         });
       });
     }
@@ -1631,13 +1227,17 @@ export default function App() {
     );
 
     if (newEntry.status === 'Pending') {
-      handleAddNotification(
-        'BazaarReminder',
-        `New Bazaar Claim: ${entry.items}`,
-        `${submitter} logged a bazaar expense of ${settings.currency}${entry.total || entry.subtotal || entry.price} for ${entry.items}. Awaiting manager verification.`,
-        undefined,
-        'Bazaar'
-      );
+      const newNotif: AppNotification = {
+        id: `notif-${Date.now()}`,
+        type: 'BazaarReminder',
+        title: `New Bazaar Claim: ${entry.items}`,
+        description: `${submitter} logged a bazaar expense of ${settings.currency}${entry.total || entry.subtotal || entry.price} for ${entry.items}. Awaiting manager verification.`,
+        date: entry.date,
+        isRead: false,
+        linkToTab: 'Bazaar',
+        timestamp: new Date().toISOString()
+      };
+      setNotifications(prev => [newNotif, ...prev]);
     }
 
     if (isSupabaseConfigured) {
@@ -1778,13 +1378,17 @@ export default function App() {
     );
 
     if (deposit.status === 'Pending') {
-      handleAddNotification(
-        'DepositReminder',
-        `New Deposit Request: ${settings.currency}${deposit.amount}`,
-        `${memberName} submitted a deposit request of ${settings.currency}${deposit.amount} via ${deposit.method}. Awaiting manager review.`,
-        undefined,
-        'Deposits'
-      );
+      const newNotif: AppNotification = {
+        id: `notif-${Date.now()}`,
+        type: 'DepositReminder',
+        title: `New Deposit Request: ${settings.currency}${deposit.amount}`,
+        description: `${memberName} submitted a deposit request of ${settings.currency}${deposit.amount} via ${deposit.method}. Awaiting manager review.`,
+        date: deposit.date,
+        isRead: false,
+        linkToTab: 'Deposits',
+        timestamp: new Date().toISOString()
+      };
+      setNotifications(prev => [newNotif, ...prev]);
     }
 
     if (isSupabaseConfigured) {
@@ -1924,11 +1528,10 @@ export default function App() {
 
   // Publish Notice
   const handleAddNotice = (notice: Omit<Notice, 'id' | 'date' | 'authorId' | 'authorName'>) => {
-    const { today } = getEffectiveDatesForMonth(activeMonth);
     const newNotice: Notice = {
       ...notice,
       id: `not-${Date.now()}`,
-      date: today,
+      date: '2026-07-18', // today's date
       authorId: currentUser.id,
       authorName: currentUser.name
     };
@@ -1954,7 +1557,7 @@ export default function App() {
 
     if (isSupabaseConfigured) {
       getSupabaseUserAndMessId(currentUser.id, users, currentUser).then(async ({ userId: authorId, messId }) => {
-        const basePayload: any = {
+        const payload: any = {
           title: notice.title,
           description: notice.description,
           priority: notice.priority,
@@ -1962,28 +1565,16 @@ export default function App() {
           author_id: authorId,
           attachment: notice.attachment || null
         };
-        if (messId) basePayload.mess_id = messId;
+        if (messId) payload.mess_id = messId;
 
-        const fullPayload: any = {
-          ...basePayload,
-          expiry_date: notice.expiryDate || null,
-          is_pinned: Boolean(notice.isPinned),
-        };
-
-        const { data, error } = await supabase.from('notices').insert(fullPayload).select();
-        if (data && data[0] && !error) {
-          const realId = String(data[0].id);
-          setNotices(prev => prev.map(n => n.id === newNotice.id ? { ...n, id: realId } : n));
-        } else if (error) {
-          // Fallback if optional columns expiry_date / is_pinned don't exist in older DB schema
-          const { data: retryData, error: retryErr } = await supabase.from('notices').insert(basePayload).select();
-          if (retryData && retryData[0] && !retryErr) {
-            const realId = String(retryData[0].id);
+        supabase.from('notices').insert(payload).select().then(({ data, error }) => {
+          if (data && data[0] && !error) {
+            const realId = String(data[0].id);
             setNotices(prev => prev.map(n => n.id === newNotice.id ? { ...n, id: realId } : n));
-          } else {
-            console.error("Error inserting notice to Supabase:", retryErr || error);
+          } else if (error) {
+            console.error("Error inserting notice to Supabase:", error);
           }
-        }
+        });
       });
     }
   };
@@ -2000,13 +1591,6 @@ export default function App() {
       `Title: ${target.title}, Priority: ${target.priority}, Author: ${target.authorName}`,
       'Notice completely deleted'
     );
-
-    if (isSupabaseConfigured) {
-      const qId = isNaN(Number(id)) ? id : Number(id);
-      supabase.from('notices').delete().eq('id', qId).then(({ error }) => {
-        if (error) console.error("Error deleting notice from Supabase:", error);
-      });
-    }
   };
 
   // Toggle Pin Notice
@@ -2022,13 +1606,6 @@ export default function App() {
       `isPinned: ${target.isPinned ? 'true' : 'false'}`,
       `isPinned: ${nextPinned ? 'true' : 'false'}`
     );
-
-    if (isSupabaseConfigured) {
-      const qId = isNaN(Number(id)) ? id : Number(id);
-      supabase.from('notices').update({ is_pinned: nextPinned }).eq('id', qId).then(({ error }) => {
-        if (error) console.warn("Could not update is_pinned on notice in Supabase:", error.message);
-      });
-    }
   };
 
   // Create User (Admin Only)
@@ -2041,18 +1618,19 @@ export default function App() {
 
     setUsers(prev => [...prev, newUser]);
 
-    // Create a corresponding blank meal sheet for the active month
+    // Create a corresponding blank meal sheet for this month
     const blankMeals: MemberMealSheet['meals'] = {};
-    getMonthDates(activeMonth).forEach((dateStr) => {
+    for (let day = 1; day <= 31; day++) {
+      const dateStr = `2026-07-${day < 10 ? '0' + day : day}`;
       blankMeals[dateStr] = {
-        breakfast: false,
-        lunch: false,
-        dinner: false,
+        breakfast: user.defaultMealOn,
+        lunch: user.defaultMealOn,
+        dinner: user.defaultMealOn,
         guestBreakfast: 0,
         guestLunch: 0,
         guestDinner: 0
       };
-    });
+    }
 
     const newSheet: MemberMealSheet = {
       userId: newUserId,
@@ -2150,246 +1728,18 @@ export default function App() {
     }
   };
 
-  // Ensure all active/existing users have meal sheet date slots initialized for a target month
-  const ensureMealsForMonth = (monthStr: string) => {
-    const targetDates = getMonthDates(monthStr);
-    setMeals(prevMeals => {
-      const existingUserIds = new Set(prevMeals.map(m => m.userId));
-      const updated = prevMeals.map(sheet => {
-        let changed = false;
-        const nextMeals = { ...sheet.meals };
-        targetDates.forEach(dateStr => {
-          if (!nextMeals[dateStr]) {
-            changed = true;
-            nextMeals[dateStr] = {
-              breakfast: false,
-              lunch: false,
-              dinner: false,
-              guestBreakfast: 0,
-              guestLunch: 0,
-              guestDinner: 0
-            };
-          }
-        });
-        return changed ? { ...sheet, meals: nextMeals } : sheet;
-      });
-
-      users.forEach(u => {
-        if (!existingUserIds.has(u.id)) {
-          const freshMeals: MemberMealSheet['meals'] = {};
-          targetDates.forEach(dateStr => {
-            freshMeals[dateStr] = {
-              breakfast: false,
-              lunch: false,
-              dinner: false,
-              guestBreakfast: 0,
-              guestLunch: 0,
-              guestDinner: 0
-            };
-          });
-          updated.push({ userId: u.id, meals: freshMeals });
-        }
-      });
-
-      return updated;
-    });
-  };
-
-  // Start / Rollover to a new billing month (e.g., July 2026 -> August 2026)
-  const handleStartNewMonth = (
-    targetMonth?: string,
-    options: { autoCloseAndCarryForward?: boolean } = {}
-  ) => {
-    const nextMonth = targetMonth && /^\d{4}-\d{2}$/.test(targetMonth)
-      ? targetMonth
-      : getNextMonth(activeMonth);
-
-    let nextClosedMonths = [...(settings.closedMonths || [])];
-
-    // If rolling over from an unclosed month with autoCarryForward requested,
-    // calculate activeMonth balances, archive snapshot, and carry forward first.
-    if (options.autoCloseAndCarryForward && !settings.isMonthClosed) {
-      const monthDates = getMonthDates(activeMonth);
-      const isVac = (userId: string, date: string) =>
-        vacations.some(vp => vp.userId === userId && date >= vp.startDate && date <= vp.endDate);
-
-      const monthBazaar = bazaarEntries
-        .filter(b => b.status === 'Approved' && b.date.startsWith(activeMonth))
-        .reduce((s, b) => s + b.price, 0);
-      const monthOtherExp = expenses
-        .filter(e => e.date.startsWith(activeMonth))
-        .reduce((s, e) => s + e.amount, 0);
-      const monthTotalExp = monthBazaar + monthOtherExp;
-
-      const activeUsersList = users.filter(u => u.isActive);
-      const totalMonthMeals = activeUsersList.reduce((sum, u) => {
-        const sheet = meals.find(s => s.userId === u.id);
-        let uMeals = 0;
-        monthDates.forEach(d => {
-          if (isVac(u.id, d)) return;
-          const m = sheet?.meals[d];
-          if (!m) return;
-          uMeals += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1 : 0) + (m.dinner ? 1 : 0)
-            + ((m.guestBreakfast || 0) * 0.5) + (m.guestLunch || 0) + (m.guestDinner || 0);
-        });
-        return sum + uMeals;
-      }, 0);
-
-      const mealRate = totalMonthMeals > 0 ? monthTotalExp / totalMonthMeals : 0;
-      const monthApprovedDeposits = deposits
-        .filter(d => d.status === 'Approved' && d.date.startsWith(activeMonth))
-        .reduce((s, d) => s + d.amount, 0);
-
-      const memberSummaries: ClosedMonthRecord['memberSummaries'] = [];
-      const updatedUsers = users.map(u => {
-        const sheet = meals.find(s => s.userId === u.id);
-        let uMeals = 0;
-        monthDates.forEach(d => {
-          if (isVac(u.id, d)) return;
-          const m = sheet?.meals[d];
-          if (!m) return;
-          uMeals += (m.breakfast ? 0.5 : 0) + (m.lunch ? 1 : 0) + (m.dinner ? 1 : 0)
-            + ((m.guestBreakfast || 0) * 0.5) + (m.guestLunch || 0) + (m.guestDinner || 0);
-        });
-        const billAmount = uMeals * mealRate;
-        const uDeposits = deposits
-          .filter(d => d.userId === u.id && d.status === 'Approved' && d.date.startsWith(activeMonth))
-          .reduce((s, d) => s + d.amount, 0);
-        const cf = u.carryForward || 0;
-        const closingBalance = Number((cf + uDeposits - billAmount).toFixed(2));
-
-        if (u.isActive) {
-          memberSummaries.push({
-            userId: u.id,
-            name: u.name,
-            totalMeals: uMeals,
-            billAmount,
-            deposits: uDeposits,
-            carryForward: cf,
-            closingBalance
-          });
-        }
-
-        return {
-          ...u,
-          carryForward: closingBalance
-        };
-      });
-
-      setUsers(updatedUsers);
-      if (isSupabaseConfigured) {
-        updatedUsers.forEach(u => {
-          if (isUUID(u.id)) {
-            supabase.from('users').update({ carry_forward: u.carryForward || 0 }).eq('id', u.id).then(({ error }) => {
-              if (error) console.error("Error updating carry_forward in Supabase:", error);
-            });
-          }
-        });
-      }
-
-      const snapshot: ClosedMonthRecord = {
-        month: activeMonth,
-        closedAt: new Date().toISOString(),
-        closedBy: currentUser.name,
-        mealRate,
-        totalMeals: totalMonthMeals,
-        totalExpenses: monthTotalExp,
-        totalDeposits: monthApprovedDeposits,
-        memberSummaries
-      };
-      nextClosedMonths = [
-        snapshot,
-        ...nextClosedMonths.filter(c => c.month !== activeMonth)
-      ];
-    }
-
-    ensureMealsForMonth(nextMonth);
-
-    const nextSettings: SystemSettings = {
-      ...settings,
-      activeMonth: nextMonth,
-      isMonthClosed: false,
-      lockOverride: false,
-      closedMonths: nextClosedMonths
-    };
-    setSettings(nextSettings);
-    syncSettingsToSupabase(nextSettings);
-
-    const prevLabel = formatMonthLabel(activeMonth, settings.language);
-    const nextLabel = formatMonthLabel(nextMonth, settings.language);
-
-    logAction(
-      'Month Closing',
-      `Rolled over active billing month from ${prevLabel} to ${nextLabel}${options.autoCloseAndCarryForward ? ' (balances carried forward)' : ''}`,
-      `${activeMonth} (${settings.isMonthClosed ? 'Closed' : 'Open'})`,
-      `${nextMonth} (Open)`
-    );
-
-    users.filter(u => u.isActive).forEach(u => {
-      handleAddNotification(
-        'System',
-        settings.language === 'Bangla'
-          ? `নতুন মাস শুরু হয়েছে: ${nextLabel}`
-          : `New Billing Month Active: ${nextLabel}`,
-        settings.language === 'Bangla'
-          ? `হ্যালো ${u.name}, মেস সিস্টেম এখন ${nextLabel} মাসে আপডেট করা হয়েছে। আগের মাসের ব্যালেন্স ক্যারী ফরওয়ার্ড করা হয়েছে।`
-          : `Hi ${u.name}, the mess billing cycle has transitioned to ${nextLabel}. Previous balances have been carried forward.`,
-        u.id,
-        'Dashboard'
-      );
-    });
-
-    showToast(
-      settings.language === 'Bangla'
-        ? `নতুন মাস (${nextLabel}) সফলভাবে চালু হয়েছে!`
-        : `Successfully switched to ${nextLabel}!`,
-      'success'
-    );
-  };
-
-  // Sync system_settings to Supabase
-  const syncSettingsToSupabase = (nextSettings: SystemSettings) => {
-    if (!isSupabaseConfigured) return;
-    getSupabaseUserAndMessId(currentUser.id, users, currentUser).then(({ messId }) => {
-      if (!messId) return;
-      supabase.from('system_settings').upsert({
-        mess_id: messId,
-        system_name: nextSettings.systemName,
-        meal_lock_time: nextSettings.mealLockTime,
-        default_meal_on: nextSettings.defaultMealOn,
-        currency: nextSettings.currency,
-        guest_meal_limit: nextSettings.guestMealLimit,
-        is_month_closed: nextSettings.isMonthClosed,
-        language: nextSettings.language,
-        mgr_can_approve_bazaar: nextSettings.mgrCanApproveBazaar ?? true,
-        mgr_can_add_deposit: nextSettings.mgrCanAddDeposit ?? true,
-        mgr_can_add_expense: nextSettings.mgrCanAddExpense ?? true,
-        mgr_can_manage_users: nextSettings.mgrCanManageUsers ?? false,
-        mgr_can_publish_notice: nextSettings.mgrCanPublishNotice ?? true,
-      }, { onConflict: 'mess_id' }).then(({ error }) => {
-        if (error) console.error("Error syncing system_settings to Supabase:", error);
-      });
-    });
-  };
-
   // Update Settings
   const handleUpdateSettings = (updatedSettings: SystemSettings) => {
     const wasClosed = settings.isMonthClosed;
-    const prevMonth = settings.activeMonth || getRealCurrentMonth();
-    const nextMonth = updatedSettings.activeMonth || prevMonth;
-    if (nextMonth !== prevMonth) {
-      ensureMealsForMonth(nextMonth);
-    }
     setSettings(updatedSettings);
-    syncSettingsToSupabase(updatedSettings);
 
-    const oldText = `Month: ${prevMonth}, Closed: ${settings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${settings.theme || 'Default'}, Lang: ${settings.language || 'English'}, LockTime: ${settings.mealLockTime}`;
-    const newText = `Month: ${nextMonth}, Closed: ${updatedSettings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${updatedSettings.theme || 'Default'}, Lang: ${updatedSettings.language || 'English'}, LockTime: ${updatedSettings.mealLockTime}`;
+    const oldText = `Closed: ${settings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${settings.theme || 'Default'}, Lang: ${settings.language || 'English'}, LockTime: ${settings.mealLockTime}`;
+    const newText = `Closed: ${updatedSettings.isMonthClosed ? 'Yes' : 'No'}, Theme: ${updatedSettings.theme || 'Default'}, Lang: ${updatedSettings.language || 'English'}, LockTime: ${updatedSettings.mealLockTime}`;
 
     if (wasClosed !== updatedSettings.isMonthClosed) {
       logAction(
         'Month Closing', 
-        `Month state toggled to ${updatedSettings.isMonthClosed ? 'Closed & Locked' : 'Open & Editable'} (${formatMonthLabel(nextMonth)})`,
+        `Month state toggled to ${updatedSettings.isMonthClosed ? 'Closed & Locked' : 'Open & Editable'}`,
         oldText,
         newText
       );
@@ -2404,12 +1754,11 @@ export default function App() {
 
     // Trigger Month Closed notification if toggled to true
     if (!wasClosed && updatedSettings.isMonthClosed) {
-      const activeLabel = formatMonthLabel(nextMonth, updatedSettings.language);
       users.filter(u => u.isActive).forEach(u => {
         handleAddNotification(
           'MonthClosed',
-          `Mess Month Closed & Locked (${activeLabel})`,
-          `Hi ${u.name}, the billing month (${activeLabel}) has been officially closed and audited. Ledger edits are now locked.`,
+          `Mess Month Closed & Locked`,
+          `Hi ${u.name}, the current month (July 2026) has been officially closed and audited. Ledger edits are now locked.`,
           u.id,
           'Reports'
         );
@@ -2465,21 +1814,17 @@ export default function App() {
     logAction('Vacation Scheduled', `Vacation registered for ${targetUser.name} from ${startDate} to ${endDate}. Meals are automatically marked OFF for these dates.`);
 
     if (isSupabaseConfigured) {
-      getSupabaseUserAndMessId(userId, users, currentUser).then(({ userId: dbUserId, messId }) => {
-        if (!isUUID(dbUserId) || !messId) return;
-        supabase.from('vacation_periods').insert({
-          mess_id: messId,
-          user_id: dbUserId,
-          start_date: startDate,
-          end_date: endDate
-        }).select().then(({ data, error }) => {
-          if (data && data[0] && !error) {
-            const realId = String(data[0].id);
-            setVacations(prev => prev.map(v => v.id === tempId ? { ...v, id: realId } : v));
-          } else if (error) {
-            console.error("Error inserting vacation to Supabase:", error);
-          }
-        });
+      supabase.from('vacation_periods').insert({
+        user_id: userId,
+        start_date: startDate,
+        end_date: endDate
+      }).select().then(({ data, error }) => {
+        if (data && data[0] && !error) {
+          const realId = String(data[0].id);
+          setVacations(prev => prev.map(v => v.id === tempId ? { ...v, id: realId } : v));
+        } else if (error) {
+          console.error("Error inserting vacation to Supabase:", error);
+        }
       });
     }
   };
@@ -2575,7 +1920,6 @@ export default function App() {
               }
             }}
             onUpdateMeals={handleUpdateMeals}
-            onNavigateTab={(tab) => setCurrentTab(tab)}
           />
         );
       case 'MealSheet':
@@ -2663,20 +2007,8 @@ export default function App() {
             settings={settings}
             currentUser={currentUser}
             role={currentPersona}
-            onUpdateUsers={(updatedUsers) => {
-              setUsers(updatedUsers);
-              if (isSupabaseConfigured) {
-                updatedUsers.forEach(u => {
-                  if (isUUID(u.id)) {
-                    supabase.from('users').update({ carry_forward: u.carryForward || 0 }).eq('id', u.id).then(({ error }) => {
-                      if (error) console.error("Error updating user carry_forward in Supabase:", error);
-                    });
-                  }
-                });
-              }
-            }}
+            onUpdateUsers={setUsers}
             onUpdateSettings={handleUpdateSettings}
-            onStartNewMonth={handleStartNewMonth}
             onLogAction={logAction}
             vacationPeriods={vacations}
           />
@@ -2704,9 +2036,6 @@ export default function App() {
             role={currentPersona}
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
-            onStartNewMonth={handleStartNewMonth}
-            activeTheme={activeUserTheme}
-            onChangeUserTheme={handleUpdateUserTheme}
             darkMode={darkMode}
             setDarkMode={setDarkMode}
             onRestoreBackup={handleRestoreBackup}
@@ -2720,7 +2049,6 @@ export default function App() {
               activityLogs,
               vacations,
               assignedBazaarPersons,
-              settings,
             }}
           />
         );
@@ -2759,7 +2087,7 @@ export default function App() {
       {/* MOBILE DRAWER SIDEBAR */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden animate-fade-in bg-slate-900/40 backdrop-blur-xs">
-          <div className="relative w-64 max-w-xs bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-100 dark:border-slate-800">
+          <div className="relative w-64 max-w-xs bg-white dark:bg-slate-900 h-full shadow-2xl border-r border-slate-100 dark:border-slate-850">
             <button 
               onClick={() => setMobileMenuOpen(false)}
               className="absolute right-4 top-4 p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-500 transition hover:text-slate-800"
@@ -2816,15 +2144,10 @@ export default function App() {
           <div className="flex items-center gap-4">
             
             {/* Month indicator */}
-            <button
-              type="button"
-              onClick={() => setCurrentTab(currentPersona === 'Admin' ? 'Settings' : 'Reports')}
-              title={currentPersona === 'Admin' ? 'Manage active month in Settings' : 'Active billing month'}
-              className="bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/70 dark:hover:bg-slate-800 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 transition cursor-pointer"
-            >
+            <div className="bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-750">
               <Calendar size={13} className="text-emerald-500" />
-              <span>{formatMonthLabel(activeMonth, settings.language)}</span>
-            </button>
+              <span>July 2026</span>
+            </div>
 
             {/* Month Closed lockdown alert banner */}
             {settings.isMonthClosed && (
@@ -2833,66 +2156,14 @@ export default function App() {
               </div>
             )}
 
-            {/* Personal Theme Switcher (Available for ALL roles) */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-                className="p-2 rounded-xl text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer"
-                title={settings.language === 'Bangla' ? 'আপনার ব্যক্তিগত থিম পরিবর্তন করুন' : 'Change Your Personal Theme'}
-              >
-                <Palette size={18} />
-                <span className="hidden xl:inline text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                  {activeUserTheme}
-                </span>
-              </button>
-
-              {themeMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setThemeMenuOpen(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-2 z-50 space-y-1">
-                    <div className="px-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                        {settings.language === 'Bangla' ? 'আপনার পার্সোনাল থিম' : 'Personal Theme'}
-                      </span>
-                    </div>
-                    {([
-                      { id: 'Light', label: 'Light Slate', dot: 'bg-slate-200 border-slate-400' },
-                      { id: 'Dark', label: 'Charcoal Dark', dot: 'bg-slate-800 border-slate-600' },
-                      { id: 'Cosmic Slate', label: 'Cosmic Slate', dot: 'bg-indigo-600 border-indigo-400' },
-                      { id: 'Emerald Forest', label: 'Emerald Forest', dot: 'bg-emerald-600 border-emerald-400' },
-                      { id: 'Rose Quartz', label: 'Rose Quartz (Pink)', dot: 'bg-pink-600 border-pink-400' },
-                    ] as const).map(opt => {
-                      const selected = activeUserTheme === opt.id;
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => {
-                            handleUpdateUserTheme(opt.id);
-                            setThemeMenuOpen(false);
-                          }}
-                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                            selected
-                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                          }`}
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className={`w-3 h-3 rounded-full border ${opt.dot}`} />
-                            <span>{opt.label}</span>
-                          </span>
-                          {selected && <Check size={14} className="text-emerald-600 dark:text-emerald-400" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
+            {/* Quick Dark Mode icon toggle */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              title={darkMode ? 'Switch to Light' : 'Switch to Dark'}
+            >
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
 
             {/* Notification Bell with Badge */}
             <button
@@ -2910,7 +2181,7 @@ export default function App() {
             {/* Persona Display avatar */}
             <div className="flex items-center gap-2.5">
               <div className="text-right hidden sm:block">
-                <span className="font-bold text-slate-900 dark:text-white text-xs block">{currentUser.name}</span>
+                <span className="font-bold text-slate-850 dark:text-white text-xs block">{currentUser.name}</span>
                 <span className="text-[10px] text-slate-400 block font-semibold uppercase tracking-wider">{currentPersona} Mode</span>
               </div>
               <img 
@@ -2926,11 +2197,11 @@ export default function App() {
         </header>
 
         {/* PAGE SCREEN STAGE */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full max-w-[1440px] mx-auto overflow-y-auto space-y-6">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full max-w-full mx-auto overflow-y-auto space-y-6">
           <React.Suspense fallback={
-            <div className="flex flex-col items-center justify-center py-24 space-y-3">
-              <div className="w-9 h-9 border-3 border-slate-200 dark:border-slate-800 border-t-emerald-600 rounded-full animate-spin" />
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Loading view...</p>
+            <div className="flex flex-col items-center justify-center py-24 space-y-4">
+              <div className="w-10 h-10 border-3 border-slate-200 border-t-emerald-600 rounded-full animate-spin"></div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading component...</p>
             </div>
           }>
             {renderTabContent()}
@@ -2956,7 +2227,6 @@ export default function App() {
         isOpen={notificationCenterOpen}
         onClose={() => setNotificationCenterOpen(false)}
         currency={settings.currency}
-        activeMonth={activeMonth}
       />
 
     </div>

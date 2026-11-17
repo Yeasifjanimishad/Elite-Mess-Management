@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Plus, 
   Search, 
@@ -13,7 +13,6 @@ import {
 import { Expense, SystemSettings, User } from '../types';
 import { motion } from 'motion/react';
 import { useFeedback } from './FeedbackContext';
-import { getRealCurrentMonth, getEffectiveDatesForMonth, formatMonthLabel, getMonthPickerOptions } from '../utils/dateUtils';
 
 interface ExpenseTabProps {
   currentUser: User;
@@ -36,38 +35,21 @@ export default function ExpenseTab({
   const { showToast, showConfirm } = useFeedback();
   const isBangla = settings.language === 'Bangla';
   const isManagerOrAdmin = role === 'Admin' || (role === 'Meal Manager' && settings.mgrCanAddExpense !== false);
-  const activeMonth = settings.activeMonth || getRealCurrentMonth();
-  const { today } = getEffectiveDatesForMonth(activeMonth);
 
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
-  const [monthFilter, setMonthFilter] = useState<string>(activeMonth);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     category: 'Gas' as any,
     amount: '',
-    date: today,
+    date: '2026-07-18',
     note: ''
   });
-
-  useEffect(() => {
-    setMonthFilter(activeMonth);
-  }, [activeMonth]);
-
-  useEffect(() => {
-    setFormData(prev => ({ ...prev, date: today }));
-  }, [today]);
-
-  const monthOptions = getMonthPickerOptions(activeMonth, [
-    ...expenses.map(e => e.date.slice(0, 7)),
-    ...(settings.closedMonths?.map(c => c.month) || [])
-  ]);
 
   const categories = ['Bazaar', 'Gas', 'Electricity', 'Internet', 'Water', 'Cleaning', 'Maid', 'Others'];
 
   const handleOpenModal = () => {
-    setFormData(prev => ({ ...prev, date: today }));
     setIsModalOpen(true);
   };
 
@@ -76,7 +58,7 @@ export default function ExpenseTab({
     setFormData({
       category: 'Gas',
       amount: '',
-      date: today,
+      date: '2026-07-18',
       note: ''
     });
   };
@@ -96,20 +78,16 @@ export default function ExpenseTab({
     handleCloseModal();
   };
 
-  const monthScopedExpenses = monthFilter === 'All'
-    ? expenses
-    : expenses.filter(e => e.date.startsWith(monthFilter));
-
-  const totalOtherExpenses = monthScopedExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalOtherExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   // Group by Category for visual chart
-  const categoryTotals = monthScopedExpenses.reduce((acc, exp) => {
+  const categoryTotals = expenses.reduce((acc, exp) => {
     acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
     return acc;
   }, {} as { [cat: string]: number });
 
   // Filter
-  const filteredExpenses = monthScopedExpenses.filter(exp => {
+  const filteredExpenses = expenses.filter(exp => {
     const matchesSearch = exp.note?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           exp.category.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = categoryFilter === 'All' || exp.category === categoryFilter;
@@ -146,7 +124,7 @@ export default function ExpenseTab({
               <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
                 Total Utility & Helper Costs
               </span>
-              <span className="text-3xl font-black text-slate-900 dark:text-white mt-1 block">
+              <span className="text-3xl font-black text-slate-850 dark:text-white mt-1 block">
                 {settings.currency}{totalOtherExpenses.toLocaleString()}
               </span>
             </div>
@@ -215,20 +193,6 @@ export default function ExpenseTab({
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-
-          {/* Month Dropdown Filter */}
-          <select
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-            className="text-xs bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-semibold cursor-pointer"
-          >
-            <option value="All">{isBangla ? 'সব মাস' : 'All Months'}</option>
-            {monthOptions.map(m => (
-              <option key={m} value={m}>
-                {formatMonthLabel(m, settings.language)}{m === activeMonth ? (isBangla ? ' (চলতি)' : ' (Active)') : ''}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Add utility expense button */}
@@ -275,7 +239,7 @@ export default function ExpenseTab({
 
                     {/* Amount */}
                     <td className="px-5 py-3.5">
-                      <span className="font-bold text-slate-900 dark:text-white text-sm">
+                      <span className="font-bold text-slate-850 dark:text-white text-sm">
                         {settings.currency}{expense.amount.toLocaleString()}
                       </span>
                     </td>
@@ -283,7 +247,7 @@ export default function ExpenseTab({
                     {/* Date */}
                     <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400">
                       <span className="flex items-center gap-1.5">
-                        <Calendar size={13} className="text-slate-400" />
+                        <Calendar size={13} className="text-slate-450" />
                         {expense.date}
                       </span>
                     </td>
@@ -338,7 +302,7 @@ export default function ExpenseTab({
                       animate={{ opacity: 1, y: 0 }}
                       className="max-w-xs mx-auto flex flex-col items-center"
                     >
-                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-600">
+                      <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800/40 flex items-center justify-center mb-4 text-slate-300 dark:text-slate-650">
                         <CreditCard size={28} />
                       </div>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
@@ -363,7 +327,7 @@ export default function ExpenseTab({
             
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                <h3 className="text-lg font-bold text-slate-850 dark:text-white">
                   Record Mess Overhead Cost
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -422,7 +386,7 @@ export default function ExpenseTab({
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Description / Invoice Notes</label>
                 <textarea
-                  placeholder="e.g. Paid maid salary for this month, or Cylinder Gas double burner bought"
+                  placeholder="e.g. Paid maid salary for July, or Cylinder Gas double burner bought"
                   required
                   rows={3}
                   value={formData.note}
